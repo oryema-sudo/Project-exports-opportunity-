@@ -2,19 +2,31 @@ import { Router, Response } from 'express';
 import { db } from '../db/index.ts';
 import { 
   organizations, users, farmers, farms, deliveries, lots, lotDeliveries, 
-  traceabilityEvents, shipments, shipmentLots, documents, auditLogs, readinessEvaluations 
+  traceabilityEvents, shipments, shipmentLots, documents, auditLogs, readinessEvaluations,
+  organizationInvitations 
 } from '../db/schema.ts';
-import { eq, and, desc, inArray } from 'drizzle-orm';
-import { requireAuth, requireRole, AuthRequest } from '../middleware/auth.ts';
-import { upload, getOrgStorageDir } from './storage.ts';
+import { eq, and, desc, inArray, gt } from 'drizzle-orm';
+import { requireAuth, requireRole, verifyFirebaseToken, AuthRequest } from '../middleware/auth.ts';
+import { upload, resolveSecureFilePath, verifyFileSignature } from './storage.ts';
 import { evaluateShipmentReadiness, READINESS_ENGINE_VERSION } from './readinessEngine.ts';
+import { seedOrganizationData } from './seedDatabase.ts';
+import { 
+  generateFarmerId, 
+  generatePlotId, 
+  generateDeliveryRef, 
+  generateLotNumber, 
+  generateExportRef, 
+  generateSecureToken,
+  sanitizeForCsv 
+} from './cryptoUtils.ts';
 import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
+import { UserRole } from '../types.ts';
 
 export const apiRouter = Router();
 
-// Helper for audit logging
+// Helper for immutable audit logging
 async function logServerAudit(
   req: AuthRequest, 
   action: string, 
@@ -43,6 +55,429 @@ async function logServerAudit(
 }
 
 // =========================================================================
+// ONBOARDING & INVITATION WORKFLOWS
+// =========================================================================
+
+/**
+ * Onboard a brand new Organization.
+ * Verified Firebase user becomes the Admin of this new organization.
+ */
+apiRouter.post('/auth/onboard-organization', verifyFirebaseToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      legalName: z.string().min(3, 'Organization legal name must be at least 3 characters'),
+      type: z.enum(['Exporter', 'Cooperative', 'Processor', 'Estate Producer', 'Association']).default('Exporter'),
+      registrationNumber: z.string().min(3, 'Registration / UCDA license number is required'),
+      country: z.string().default('Uganda'),
+      district: z.string().min(2, 'District is required'),
+      address: z.string().min(3, 'Physical address is required'),
+      contactPhone: z.string().min(6, 'Valid contact phone is required'),
+      contactEmail: z.string().email().optional(),
+      website: z.string().optional(),
+      subscriptionPlan: z.string().default('Professional (UGX 600k/mo)'),
+      seedPilotData: z.boolean().default(true)
+    });
+
+    const parsed = schema.parse(req.body);
+    const decodedToken = req.decodedToken!;
+    const uid = decodedToken.uid;
+    const email = (decodedToken.email || parsed.contactEmail || `admin_${uid.slice(0, 8)}@ugandacoffee.org`).toLowerCase();
+    const name = decodedToken.name || email.split('@')[0] || 'Coffee Director';
+
+    // Check if user is already assigned to an organization
+    const existingUser = await db.select().from(users).where(eq(users.uid, uid)).limit(1);
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'You are already a member of an existing organization.' });
+    }
+
+    // Create the organization record
+    const [newOrg] = await db.insert(organizations).values({
+      legalName: parsed.legalName,
+      type: parsed.type,
+      registrationNumber: parsed.registrationNumber,
+      country: parsed.country,
+      district: parsed.district,
+      address: parsed.address,
+      contactPhone: parsed.contactPhone,
+      email: email,
+      contactEmail: parsed.contactEmail || email,
+      website: parsed.website || '',
+      subscriptionPlan: parsed.subscriptionPlan,
+      activeStatus: 'Active'
+    }).returning();
+
+    // Create the initial Admin user record
+    const [newUser] = await db.insert(users).values({
+      uid,
+      email,
+      name,
+      role: 'admin',
+      organizationId: newOrg!.id,
+      title: 'Managing Director & Compliance Lead',
+      isActive: true
+    }).returning();
+
+    // Optionally seed standard Uganda pilot baseline data (farmers, plots, deliveries, lots, shipments)
+    if (parsed.seedPilotData) {
+      try {
+        await seedOrganizationData(newOrg!.id, newUser!.name);
+      } catch (seedErr) {
+        console.error('[Onboarding] Seed initialization failed:', seedErr);
+      }
+    }
+
+    // Set user on request to log audit event
+    req.user = {
+      id: newUser!.id,
+      uid: newUser!.uid,
+      email: newUser!.email,
+      name: newUser!.name,
+      role: 'admin',
+      organizationId: newOrg!.id,
+      title: newUser!.title,
+      isActive: true
+    };
+
+    await logServerAudit(req, 'Organization Created', 'Organization', newOrg!.id, undefined, `${newOrg!.legalName} (${newOrg!.registrationNumber})`);
+
+    res.status(201).json({
+      success: true,
+      user: req.user,
+      organization: newOrg
+    });
+  } catch (err: any) {
+    console.error('[Onboarding API] Onboarding error:', err);
+    res.status(400).json({ error: err.message || 'Failed to onboard organization' });
+  }
+});
+
+/**
+ * Preview Invitation Details by Token (Public / unauthenticated)
+ */
+apiRouter.get('/auth/invite/:token', async (req: AuthRequest, res: Response) => {
+  try {
+    const token = req.params.token as string;
+    if (!token || token.length < 16) {
+      return res.status(400).json({ error: 'Invalid invitation token' });
+    }
+
+    const invites = await db.select().from(organizationInvitations)
+      .where(eq(organizationInvitations.token, token))
+      .limit(1);
+
+    if (invites.length === 0) {
+      return res.status(404).json({ error: 'Invitation not found' });
+    }
+
+    const invite = invites[0]!;
+    const org = await db.select().from(organizations).where(eq(organizations.id, invite.organizationId)).limit(1);
+
+    const isExpired = new Date() > invite.expiresAt;
+    const isAccepted = invite.status === 'accepted';
+
+    res.json({
+      email: invite.email,
+      role: invite.role,
+      organizationName: org[0]?.legalName || 'Ugandan Coffee Organization',
+      invitedByName: invite.invitedByName,
+      status: invite.status,
+      expiresAt: invite.expiresAt.toISOString(),
+      isExpired,
+      isAccepted,
+      isValid: !isExpired && !isAccepted && invite.status === 'pending'
+    });
+  } catch (err: any) {
+    console.error('[Invite API] Preview error:', err);
+    res.status(500).json({ error: 'Failed to inspect invitation' });
+  }
+});
+
+/**
+ * Accept an Organization Invitation.
+ * Links the verified Firebase user to the target organization with their assigned role.
+ */
+apiRouter.post('/auth/accept-invite', verifyFirebaseToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      token: z.string().min(16, 'Valid invitation token required')
+    });
+
+    const { token } = schema.parse(req.body);
+    const decodedToken = req.decodedToken!;
+    const uid = decodedToken.uid;
+    const email = (decodedToken.email || '').toLowerCase();
+    const name = decodedToken.name || email.split('@')[0] || 'Team Member';
+
+    // Find invitation
+    const invites = await db.select().from(organizationInvitations)
+      .where(eq(organizationInvitations.token, token))
+      .limit(1);
+
+    if (invites.length === 0) {
+      return res.status(404).json({ error: 'Invitation not found or invalid' });
+    }
+
+    const invite = invites[0]!;
+
+    if (invite.status !== 'pending') {
+      return res.status(400).json({ error: `Invitation has already been ${invite.status}` });
+    }
+
+    if (new Date() > invite.expiresAt) {
+      await db.update(organizationInvitations)
+        .set({ status: 'expired' })
+        .where(eq(organizationInvitations.id, invite.id));
+      return res.status(400).json({ error: 'Invitation has expired. Please ask your administrator for a new invite.' });
+    }
+
+    // Check if user is already registered in this organization
+    const existingUser = await db.select().from(users).where(eq(users.uid, uid)).limit(1);
+    let userRecord: any;
+
+    if (existingUser.length > 0) {
+      // User exists - update organization and role
+      const [updatedUser] = await db.update(users)
+        .set({
+          organizationId: invite.organizationId,
+          role: invite.role,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, existingUser[0]!.id))
+        .returning();
+      userRecord = updatedUser;
+    } else {
+      // Create new user profile
+      const [newUser] = await db.insert(users).values({
+        uid,
+        email: email || invite.email,
+        name,
+        role: invite.role as UserRole,
+        organizationId: invite.organizationId,
+        title: invite.role === 'admin' ? 'Compliance Lead' : (invite.role === 'staff' ? 'Field Operations Officer' : 'Auditor / Viewer'),
+        isActive: true
+      }).returning();
+      userRecord = newUser;
+    }
+
+    // Mark invitation as accepted
+    await db.update(organizationInvitations)
+      .set({
+        status: 'accepted',
+        acceptedAt: new Date()
+      })
+      .where(eq(organizationInvitations.id, invite.id));
+
+    const org = await db.select().from(organizations).where(eq(organizations.id, invite.organizationId)).limit(1);
+
+    req.user = {
+      id: userRecord.id,
+      uid: userRecord.uid,
+      email: userRecord.email,
+      name: userRecord.name,
+      role: userRecord.role as UserRole,
+      organizationId: userRecord.organizationId,
+      title: userRecord.title,
+      isActive: true
+    };
+
+    await logServerAudit(req, 'Invitation Accepted', 'User', userRecord.id, undefined, `Joined as ${invite.role}`);
+
+    res.json({
+      success: true,
+      user: req.user,
+      organization: org[0] || null
+    });
+  } catch (err: any) {
+    console.error('[Invite API] Accept error:', err);
+    res.status(400).json({ error: err.message || 'Failed to accept invitation' });
+  }
+});
+
+/**
+ * List all organization invitations (Admin only)
+ */
+apiRouter.get('/invitations', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const records = await db.select().from(organizationInvitations)
+      .where(eq(organizationInvitations.organizationId, orgId))
+      .orderBy(desc(organizationInvitations.createdAt));
+
+    res.json(records.map(i => ({
+      id: i.id,
+      email: i.email,
+      role: i.role,
+      token: i.token,
+      invitedByName: i.invitedByName,
+      status: i.status,
+      expiresAt: i.expiresAt.toISOString(),
+      acceptedAt: i.acceptedAt ? i.acceptedAt.toISOString() : null,
+      createdAt: i.createdAt.toISOString()
+    })));
+  } catch (err: any) {
+    console.error('[Invitations API] List failed:', err);
+    res.status(500).json({ error: 'Failed to fetch organization invitations' });
+  }
+});
+
+/**
+ * Create a new team invitation (Admin only)
+ */
+apiRouter.post('/invitations', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      email: z.string().email('Valid colleague email is required'),
+      role: z.enum(['admin', 'staff', 'viewer']).default('staff')
+    });
+
+    const parsed = schema.parse(req.body);
+    const orgId = req.user!.organizationId;
+    const targetEmail = parsed.email.toLowerCase();
+
+    // Check if user is already an active member of this org
+    const existingMember = await db.select().from(users)
+      .where(and(eq(users.organizationId, orgId), eq(users.email, targetEmail)))
+      .limit(1);
+
+    if (existingMember.length > 0) {
+      return res.status(400).json({ error: 'A team member with this email address is already part of your organization.' });
+    }
+
+    // Generate cryptographic token
+    const token = generateSecureToken(24);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days expiration
+
+    const [created] = await db.insert(organizationInvitations).values({
+      organizationId: orgId,
+      email: targetEmail,
+      role: parsed.role,
+      token,
+      invitedByName: req.user!.name,
+      invitedByUserId: req.user!.id,
+      status: 'pending',
+      expiresAt
+    }).returning();
+
+    await logServerAudit(req, 'Team Invitation Created', 'Invitation', created!.id, undefined, `Invited ${targetEmail} as ${parsed.role}`);
+
+    res.status(201).json({
+      id: created!.id,
+      email: created!.email,
+      role: created!.role,
+      token: created!.token,
+      expiresAt: created!.expiresAt.toISOString(),
+      inviteLink: `${req.protocol}://${req.get('host')}/?invite=${token}`
+    });
+  } catch (err: any) {
+    console.error('[Invitations API] Creation failed:', err);
+    res.status(400).json({ error: err.message || 'Failed to create invitation' });
+  }
+});
+
+/**
+ * Revoke a pending invitation (Admin only)
+ */
+apiRouter.delete('/invitations/:id', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const inviteId = req.params.id as string;
+
+    const deleted = await db.delete(organizationInvitations)
+      .where(and(eq(organizationInvitations.id, inviteId), eq(organizationInvitations.organizationId, orgId)))
+      .returning();
+
+    if (deleted.length === 0) {
+      return res.status(404).json({ error: 'Invitation not found or already removed' });
+    }
+
+    await logServerAudit(req, 'Team Invitation Revoked', 'Invitation', inviteId, JSON.stringify(deleted[0]));
+    res.json({ success: true, id: inviteId });
+  } catch (err: any) {
+    console.error('[Invitations API] Delete failed:', err);
+    res.status(500).json({ error: 'Failed to revoke invitation' });
+  }
+});
+
+/**
+ * List Team Members (Admin & Staff)
+ */
+apiRouter.get('/team', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const members = await db.select().from(users)
+      .where(eq(users.organizationId, orgId))
+      .orderBy(desc(users.createdAt));
+
+    res.json(members.map(m => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      role: m.role,
+      title: m.title || '',
+      isActive: m.isActive,
+      createdAt: m.createdAt.toISOString()
+    })));
+  } catch (err: any) {
+    console.error('[Team API] Fetch failed:', err);
+    res.status(500).json({ error: 'Failed to fetch team members' });
+  }
+});
+
+/**
+ * Update Team Member Role or Status (Admin only)
+ */
+apiRouter.put('/team/:id/role', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const targetUserId = req.params.id as string;
+
+    const schema = z.object({
+      role: z.enum(['admin', 'staff', 'viewer']).optional(),
+      isActive: z.boolean().optional(),
+      title: z.string().optional()
+    });
+
+    const parsed = schema.parse(req.body);
+
+    const existing = await db.select().from(users)
+      .where(and(eq(users.id, targetUserId), eq(users.organizationId, orgId)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Team member not found' });
+    }
+
+    // Prevent removing or deactivating the last active Admin
+    if ((parsed.role && parsed.role !== 'admin') || parsed.isActive === false) {
+      if (existing[0]!.role === 'admin') {
+        const activeAdmins = await db.select().from(users)
+          .where(and(eq(users.organizationId, orgId), eq(users.role, 'admin'), eq(users.isActive, true)));
+        if (activeAdmins.length <= 1) {
+          return res.status(400).json({ error: 'Cannot demote or deactivate the only organization Administrator.' });
+        }
+      }
+    }
+
+    const [updated] = await db.update(users)
+      .set({
+        role: parsed.role ?? existing[0]!.role,
+        isActive: parsed.isActive !== undefined ? parsed.isActive : existing[0]!.isActive,
+        title: parsed.title !== undefined ? parsed.title : existing[0]!.title,
+        updatedAt: new Date()
+      })
+      .where(and(eq(users.id, targetUserId), eq(users.organizationId, orgId)))
+      .returning();
+
+    await logServerAudit(req, 'Member Permissions Updated', 'User', targetUserId, JSON.stringify(existing[0]), JSON.stringify(updated));
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error('[Team API] Update failed:', err);
+    res.status(400).json({ error: err.message || 'Failed to update member role' });
+  }
+});
+
+// =========================================================================
 // AUTH & CURRENT USER / ORGANIZATION PROFILE
 // =========================================================================
 
@@ -59,7 +494,6 @@ apiRouter.get('/auth/me', requireAuth, async (req: AuthRequest, res: Response) =
   }
 });
 
-// Update Organization Profile (Admin only)
 apiRouter.put('/organizations/current', requireAuth, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
   try {
     const schema = z.object({
@@ -151,7 +585,7 @@ apiRouter.post('/farmers', requireAuth, requireRole(['admin', 'staff']), async (
 
     const parsed = schema.parse(req.body);
     const orgId = req.user!.organizationId;
-    const businessCode = `UG-F-${Math.floor(10000 + Math.random() * 90000)}`;
+    const businessCode = generateFarmerId(parsed.district);
 
     const [created] = await db.insert(farmers).values({
       organizationId: orgId,
@@ -300,7 +734,7 @@ apiRouter.post('/farms', requireAuth, requireRole(['admin', 'staff']), async (re
     const parsed = schema.parse(req.body);
     const orgId = req.user!.organizationId;
 
-    // Verify farmer belongs to same tenant
+    // Deep tenant isolation: verify farmer belongs to same tenant
     const farmerExists = await db.select().from(farmers)
       .where(and(eq(farmers.id, parsed.farmerId), eq(farmers.organizationId, orgId)))
       .limit(1);
@@ -309,7 +743,7 @@ apiRouter.post('/farms', requireAuth, requireRole(['admin', 'staff']), async (re
       return res.status(400).json({ error: 'Specified farmer does not exist in your organization' });
     }
 
-    const businessId = `UG-PL-${Math.floor(1000 + Math.random() * 9000)}`;
+    const businessId = generatePlotId(parsed.district);
 
     const [created] = await db.insert(farms).values({
       organizationId: orgId,
@@ -456,7 +890,7 @@ apiRouter.post('/deliveries', requireAuth, requireRole(['admin', 'staff']), asyn
       grade: z.string(),
       moistureContentPercent: z.number().optional().default(12.5),
       buyingLocation: z.string().optional().default('Kasese Main Depot'),
-      receiptNumber: z.string().min(2),
+      receiptNumber: z.string().optional(),
       pricePerKgUgx: z.number().optional().default(8500),
       notes: z.string().optional()
     });
@@ -464,7 +898,26 @@ apiRouter.post('/deliveries', requireAuth, requireRole(['admin', 'staff']), asyn
     const parsed = schema.parse(req.body);
     const orgId = req.user!.organizationId;
 
-    const receiptRef = parsed.receiptNumber.startsWith('DEL-') ? parsed.receiptNumber : `DEL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Relational tenant verification: verify both farmer and farm belong to this org and to each other
+    const farmerExists = await db.select().from(farmers)
+      .where(and(eq(farmers.id, parsed.farmerId), eq(farmers.organizationId, orgId)))
+      .limit(1);
+
+    if (farmerExists.length === 0) {
+      return res.status(400).json({ error: 'Invalid farmer for this organization' });
+    }
+
+    const farmExists = await db.select().from(farms)
+      .where(and(eq(farms.id, parsed.farmId), eq(farms.organizationId, orgId), eq(farms.farmerId, parsed.farmerId)))
+      .limit(1);
+
+    if (farmExists.length === 0) {
+      return res.status(400).json({ error: 'Invalid farm parcel or farm does not belong to specified farmer' });
+    }
+
+    const receiptRef = parsed.receiptNumber && parsed.receiptNumber.trim().length > 0 
+      ? parsed.receiptNumber 
+      : generateDeliveryRef();
 
     const [created] = await db.insert(deliveries).values({
       organizationId: orgId,
@@ -480,7 +933,7 @@ apiRouter.post('/deliveries', requireAuth, requireRole(['admin', 'staff']), asyn
       moistureContentPercent: parsed.moistureContentPercent.toString(),
       buyingLocation: parsed.buyingLocation,
       buyingDepot: parsed.buyingLocation,
-      receiptNumber: parsed.receiptNumber,
+      receiptNumber: receiptRef,
       numberOfBags: Math.ceil(parsed.quantityKg / 60),
       pricePerKgUgx: parsed.pricePerKgUgx.toString(),
       totalPaymentUgx: (parsed.quantityKg * parsed.pricePerKgUgx).toString(),
@@ -507,7 +960,6 @@ apiRouter.get('/lots', requireAuth, async (req: AuthRequest, res: Response) => {
       .where(eq(lots.organizationId, orgId))
       .orderBy(desc(lots.createdAt));
 
-    // Also get all events and deliveries linked to lots
     const allEvents = await db.select().from(traceabilityEvents)
       .where(eq(traceabilityEvents.organizationId, orgId));
     
@@ -571,7 +1023,7 @@ apiRouter.get('/lots', requireAuth, async (req: AuthRequest, res: Response) => {
 apiRouter.post('/lots', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
   try {
     const schema = z.object({
-      lotNumber: z.string().min(2),
+      lotNumber: z.string().optional(),
       coffeeType: z.enum(['Robusta', 'Arabica']),
       grade: z.string(),
       quantityKg: z.number().positive(),
@@ -585,9 +1037,22 @@ apiRouter.post('/lots', requireAuth, requireRole(['admin', 'staff']), async (req
     const orgId = req.user!.organizationId;
     const now = new Date().toISOString().split('T')[0];
 
+    const lotNumber = parsed.lotNumber && parsed.lotNumber.trim().length > 0 
+      ? parsed.lotNumber 
+      : generateLotNumber(parsed.coffeeType);
+
+    // Deep tenant verification for linked deliveries
+    if (parsed.deliveryIds.length > 0) {
+      const validDeliveries = await db.select().from(deliveries)
+        .where(and(inArray(deliveries.id, parsed.deliveryIds), eq(deliveries.organizationId, orgId)));
+      if (validDeliveries.length !== parsed.deliveryIds.length) {
+        return res.status(400).json({ error: 'One or more intake deliveries do not exist in your organization' });
+      }
+    }
+
     const [createdLot] = await db.insert(lots).values({
       organizationId: orgId,
-      lotNumber: parsed.lotNumber,
+      lotNumber,
       coffeeType: parsed.coffeeType,
       grade: parsed.grade,
       quantityKg: parsed.quantityKg.toString(),
@@ -607,7 +1072,6 @@ apiRouter.post('/lots', requireAuth, requireRole(['admin', 'staff']), async (req
           lotId: createdLot!.id,
           deliveryId: delId
         });
-        // Update delivery with associatedLotId
         await db.update(deliveries)
           .set({ associatedLotId: createdLot!.id })
           .where(and(eq(deliveries.id, delId), eq(deliveries.organizationId, orgId)));
@@ -623,7 +1087,7 @@ apiRouter.post('/lots', requireAuth, requireRole(['admin', 'staff']), async (req
       dateTime: new Date().toISOString(),
       responsibleParty: req.user!.name,
       quantityKg: parsed.quantityKg.toString(),
-      referenceDocNumber: parsed.lotNumber,
+      referenceDocNumber: lotNumber,
       notes: 'Initial lot formation from verified smallholder intake receipts'
     });
 
@@ -635,7 +1099,6 @@ apiRouter.post('/lots', requireAuth, requireRole(['admin', 'staff']), async (req
   }
 });
 
-// Add Traceability Custody Event to a Lot
 apiRouter.post('/lots/:id/events', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
   try {
     const lotId = req.params.id as string;
@@ -716,7 +1179,7 @@ apiRouter.get('/shipments', requireAuth, async (req: AuthRequest, res: Response)
 apiRouter.post('/shipments', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
   try {
     const schema = z.object({
-      exportReference: z.string().min(2),
+      exportReference: z.string().optional(),
       shipmentDate: z.string().min(2),
       buyerName: z.string().min(2),
       destinationCountry: z.string().min(2),
@@ -730,9 +1193,22 @@ apiRouter.post('/shipments', requireAuth, requireRole(['admin', 'staff']), async
     const parsed = schema.parse(req.body);
     const orgId = req.user!.organizationId;
 
+    const exportRef = parsed.exportReference && parsed.exportReference.trim().length > 0
+      ? parsed.exportReference
+      : generateExportRef();
+
+    // Deep tenant verification for linked lots
+    if (parsed.lotIds.length > 0) {
+      const validLots = await db.select().from(lots)
+        .where(and(inArray(lots.id, parsed.lotIds), eq(lots.organizationId, orgId)));
+      if (validLots.length !== parsed.lotIds.length) {
+        return res.status(400).json({ error: 'One or more coffee lots do not exist in your organization' });
+      }
+    }
+
     const [created] = await db.insert(shipments).values({
       organizationId: orgId,
-      exportReference: parsed.exportReference,
+      exportReference: exportRef,
       shipmentDate: parsed.shipmentDate,
       buyerName: parsed.buyerName,
       destinationCountry: parsed.destinationCountry,
@@ -909,6 +1385,73 @@ apiRouter.get('/shipments/:id/evaluate', requireAuth, async (req: AuthRequest, r
   }
 });
 
+// Comprehensive Export Evidence Pack Manifest
+apiRouter.get('/shipments/:id/evidence-pack', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const shipmentId = req.params.id as string;
+    const orgId = req.user!.organizationId;
+
+    const org = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    const shipment = await db.select().from(shipments)
+      .where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, orgId)))
+      .limit(1);
+
+    if (shipment.length === 0) {
+      return res.status(404).json({ error: 'Shipment not found' });
+    }
+
+    const sLots = await db.select().from(shipmentLots).where(eq(shipmentLots.shipmentId, shipmentId));
+    const lotIds = sLots.map(sl => sl.lotId);
+    
+    let linkedLots: any[] = [];
+    if (lotIds.length > 0) {
+      linkedLots = await db.select().from(lots).where(inArray(lots.id, lotIds));
+    }
+
+    let linkedDeliveries: any[] = [];
+    if (lotIds.length > 0) {
+      const lDels = await db.select().from(lotDeliveries).where(inArray(lotDeliveries.lotId, lotIds));
+      const delIds = lDels.map(ld => ld.deliveryId);
+      if (delIds.length > 0) {
+        linkedDeliveries = await db.select().from(deliveries).where(inArray(deliveries.id, delIds));
+      }
+    }
+
+    const farmerIds = Array.from(new Set(linkedDeliveries.map(d => d.farmerId)));
+    const farmIds = Array.from(new Set(linkedDeliveries.map(d => d.farmId)));
+
+    let linkedFarmers: any[] = [];
+    if (farmerIds.length > 0) {
+      linkedFarmers = await db.select().from(farmers).where(inArray(farmers.id, farmerIds));
+    }
+
+    let linkedFarms: any[] = [];
+    if (farmIds.length > 0) {
+      linkedFarms = await db.select().from(farms).where(inArray(farms.id, farmIds));
+    }
+
+    const pack = {
+      manifestVersion: '1.2.0-uganda',
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user!.name,
+      regulatoryNotice: 'Software-generated due-diligence evidence pack. Does not constitute statutory EUDR certification.',
+      exporterOrganization: org[0],
+      shipment: shipment[0],
+      contributingLots: linkedLots,
+      farmerIntakeReceipts: linkedDeliveries,
+      smallholderFarmers: linkedFarmers,
+      farmParcelsGeospatial: linkedFarms
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="evidence-pack-${shipment[0]!.exportReference}.json"`);
+    res.json(pack);
+  } catch (err: any) {
+    console.error('[Evidence Pack API] Error:', err);
+    res.status(500).json({ error: 'Failed to generate evidence pack' });
+  }
+});
+
 // =========================================================================
 // DOCUMENTS & PRIVATE STORAGE
 // =========================================================================
@@ -945,6 +1488,14 @@ apiRouter.post('/documents/upload', requireAuth, requireRole(['admin', 'staff'])
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded or file rejected by security filter' });
+    }
+
+    // Inspect file signature / magic bytes
+    const isValidSignature = verifyFileSignature(req.file.path, req.file.mimetype);
+    if (!isValidSignature) {
+      // Remove corrupted / suspicious file immediately
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      return res.status(400).json({ error: 'File content signature does not match claimed file type' });
     }
 
     const { type, relatedEntityType, relatedEntityId, notes } = req.body;
@@ -1011,7 +1562,7 @@ apiRouter.put('/documents/:id', requireAuth, requireRole(['admin', 'staff']), as
   }
 });
 
-// Secure Document Download with strict Tenant Isolation
+// Secure Document Download with strict Boundary and Path Traversal verification
 apiRouter.get('/documents/:id/download', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = req.user!.organizationId;
@@ -1025,15 +1576,15 @@ apiRouter.get('/documents/:id/download', requireAuth, async (req: AuthRequest, r
       return res.status(404).json({ error: 'Document not found or access denied' });
     }
 
-    const fullPath = path.isAbsolute(doc[0]!.filePath) ? doc[0]!.filePath : path.join(process.cwd(), doc[0]!.filePath);
+    const securePath = resolveSecureFilePath(doc[0]!.filePath, orgId);
 
-    if (!fs.existsSync(fullPath)) {
+    if (!fs.existsSync(securePath)) {
       return res.status(404).json({ error: 'File contents not found in private storage' });
     }
 
     res.setHeader('Content-Type', doc[0]!.mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc[0]!.fileName)}"`);
-    fs.createReadStream(fullPath).pipe(res);
+    fs.createReadStream(securePath).pipe(res);
   } catch (err: any) {
     console.error('[Documents API] Download failed:', err);
     res.status(500).json({ error: 'Failed to download file' });
@@ -1067,6 +1618,76 @@ apiRouter.get('/audit-logs', requireAuth, async (req: AuthRequest, res: Response
   } catch (err: any) {
     console.error('[Audit API] Query failed:', err);
     res.status(500).json({ error: 'Failed to fetch audit trail' });
+  }
+});
+
+// =========================================================================
+// SECURE CSV EXPORTS (PROTECTED FROM CSV INJECTION)
+// =========================================================================
+
+apiRouter.get('/export/farmers/csv', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const records = await db.select().from(farmers).where(eq(farmers.organizationId, orgId));
+
+    const headers = ['Farmer Code', 'Full Name', 'Phone', 'District', 'Subcounty', 'Parish', 'Village', 'National ID (NIN)', 'Cooperative', 'Status'];
+    const rows = records.map(f => [
+      sanitizeForCsv(f.farmerRegId),
+      sanitizeForCsv(f.fullName),
+      sanitizeForCsv(f.phone),
+      sanitizeForCsv(f.district),
+      sanitizeForCsv(f.subcounty),
+      sanitizeForCsv(f.parish),
+      sanitizeForCsv(f.village),
+      sanitizeForCsv(f.nationalId || ''),
+      sanitizeForCsv(f.cooperative),
+      sanitizeForCsv(f.verificationStatus)
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="uganda-farmers-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csvContent);
+  } catch (err: any) {
+    console.error('[Export API] Farmers CSV export failed:', err);
+    res.status(500).json({ error: 'Failed to export farmers CSV' });
+  }
+});
+
+apiRouter.get('/export/deliveries/csv', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const records = await db.select().from(deliveries).where(eq(deliveries.organizationId, orgId));
+    const allFarmers = await db.select().from(farmers).where(eq(farmers.organizationId, orgId));
+    const farmerMap = new Map(allFarmers.map(f => [f.id, f]));
+
+    const headers = ['Receipt Ref', 'Date Received', 'Farmer Reg Code', 'Farmer Name', 'District', 'Coffee Type', 'Grade', 'Quantity (Kg)', 'Moisture %', 'Buying Depot', 'Payment (UGX)'];
+    const rows = records.map(d => {
+      const farmer = farmerMap.get(d.farmerId);
+      return [
+        sanitizeForCsv(d.deliveryRef),
+        sanitizeForCsv(d.dateReceived),
+        sanitizeForCsv(farmer?.farmerRegId || ''),
+        sanitizeForCsv(farmer?.fullName || 'Unknown Farmer'),
+        sanitizeForCsv(farmer?.district || ''),
+        sanitizeForCsv(d.coffeeType),
+        sanitizeForCsv(d.grade),
+        sanitizeForCsv(d.quantityKg),
+        sanitizeForCsv(d.moistureContentPercent || '12.5'),
+        sanitizeForCsv(d.buyingLocation || ''),
+        sanitizeForCsv(d.totalPaymentUgx || '')
+      ];
+    });
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="coffee-intake-deliveries-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csvContent);
+  } catch (err: any) {
+    console.error('[Export API] Deliveries CSV export failed:', err);
+    res.status(500).json({ error: 'Failed to export deliveries CSV' });
   }
 });
 
@@ -1132,8 +1753,8 @@ apiRouter.post('/import/csv', requireAuth, requireRole(['admin', 'staff']), asyn
         continue;
       }
 
-      // Insert farmer & farm plot atomically
-      const farmerCode = `UG-F-${Math.floor(10000 + Math.random() * 90000)}`;
+      // Insert farmer & farm plot atomically with cryptographically secure identifiers
+      const farmerCode = generateFarmerId(district);
       const [newFarmer] = await db.insert(farmers).values({
         organizationId: orgId,
         farmerRegId: farmerCode,
@@ -1150,7 +1771,7 @@ apiRouter.post('/import/csv', requireAuth, requireRole(['admin', 'staff']), asyn
         verificationStatus: nationalId ? 'Verified' : 'Partially verified'
       }).returning();
 
-      const plotCode = `UG-PL-${Math.floor(1000 + Math.random() * 9000)}`;
+      const plotCode = generatePlotId(district);
       await db.insert(farms).values({
         organizationId: orgId,
         farmerId: newFarmer!.id,

@@ -52,6 +52,140 @@ export const api = {
     return res.json();
   },
 
+  // Organization Onboarding & Invitations
+  async onboardOrganization(data: {
+    legalName: string;
+    type: string;
+    registrationNumber: string;
+    district: string;
+    address: string;
+    contactPhone: string;
+    contactEmail?: string;
+    subscriptionPlan?: string;
+    seedPilotData?: boolean;
+  }): Promise<{ user: User; organization: Organization }> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/auth/onboard-organization', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to complete organization onboarding');
+    }
+    return res.json();
+  },
+
+  async getInvitePreview(token: string): Promise<{
+    email: string;
+    role: string;
+    organizationName: string;
+    invitedByName: string;
+    status: string;
+    expiresAt: string;
+    isExpired: boolean;
+    isAccepted: boolean;
+    isValid: boolean;
+  }> {
+    const res = await fetch(`/api/auth/invite/${token}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load invitation details');
+    }
+    return res.json();
+  },
+
+  async acceptInvite(token: string): Promise<{ user: User; organization: Organization }> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/auth/accept-invite', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ token })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to accept invitation');
+    }
+    return res.json();
+  },
+
+  async getInvitations(): Promise<Array<{
+    id: string;
+    email: string;
+    role: string;
+    token: string;
+    invitedByName: string;
+    status: string;
+    expiresAt: string;
+    acceptedAt: string | null;
+    createdAt: string;
+  }>> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/invitations', { headers });
+    if (!res.ok) throw new Error('Failed to fetch invitations');
+    return res.json();
+  },
+
+  async createInvitation(data: { email: string; role: 'admin' | 'staff' | 'viewer' }): Promise<{
+    id: string;
+    email: string;
+    role: string;
+    token: string;
+    expiresAt: string;
+    inviteLink: string;
+  }> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/invitations', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to generate invitation');
+    }
+    return res.json();
+  },
+
+  async revokeInvitation(id: string): Promise<void> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/invitations/${id}`, {
+      method: 'DELETE',
+      headers
+    });
+    if (!res.ok) throw new Error('Failed to revoke invitation');
+  },
+
+  async getTeamMembers(): Promise<Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    title: string;
+    isActive: boolean;
+    createdAt: string;
+  }>> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/team', { headers });
+    if (!res.ok) throw new Error('Failed to fetch team members');
+    return res.json();
+  },
+
+  async updateTeamMemberRole(id: string, data: { role?: string; isActive?: boolean; title?: string }): Promise<any> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/team/${id}/role`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update member role');
+    }
+    return res.json();
+  },
+
   // Farmers
   async getFarmers(): Promise<Farmer[]> {
     const headers = await getAuthHeader();

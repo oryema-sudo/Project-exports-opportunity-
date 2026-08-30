@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, numeric, integer, jsonb, uuid, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, numeric, integer, jsonb, uuid, boolean, uniqueIndex, index, unique } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // --- Organizations (Tenants) ---
@@ -14,7 +14,7 @@ export const organizations = pgTable('organizations', {
   email: text('email').notNull(),
   contactEmail: text('contact_email'),
   website: text('website').default(''),
-  subscriptionPlan: text('subscription_plan').notNull().default('Starter'),
+  subscriptionPlan: text('subscription_plan').notNull().default('Professional (UGX 600k/mo)'),
   activeStatus: text('active_status').notNull().default('Active'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
@@ -32,6 +32,32 @@ export const users = pgTable('users', {
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgEmailUnique: uniqueIndex('users_org_email_unique').on(table.organizationId, table.email),
+    orgIdIdx: index('users_org_id_idx').on(table.organizationId),
+  };
+});
+
+// --- Organization Invitations (Secure Multi-tenant onboarding) ---
+export const organizationInvitations = pgTable('organization_invitations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
+  email: text('email').notNull(),
+  role: text('role').notNull().default('staff'), // 'admin' | 'staff' | 'viewer'
+  token: text('token').notNull().unique(),
+  invitedByName: text('invited_by_name').notNull(),
+  invitedByUserId: text('invited_by_user_id'),
+  status: text('status').notNull().default('pending'), // 'pending' | 'accepted' | 'revoked' | 'expired'
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgIdx: index('invitations_org_idx').on(table.organizationId),
+    tokenIdx: uniqueIndex('invitations_token_idx').on(table.token),
+    emailIdx: index('invitations_email_idx').on(table.email)
+  };
 });
 
 // --- Farmers (Smallholder registry) ---
@@ -54,6 +80,12 @@ export const farmers = pgTable('farmers', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgFarmerRegUnique: uniqueIndex('farmers_org_reg_unique').on(table.organizationId, table.farmerRegId),
+    orgIdIdx: index('farmers_org_id_idx').on(table.organizationId),
+    districtIdx: index('farmers_district_idx').on(table.district)
+  };
 });
 
 // --- Farm Plots (Centroids & Polygon boundaries) ---
@@ -80,6 +112,12 @@ export const farms = pgTable('farms', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgPlotUnique: uniqueIndex('farms_org_plot_unique').on(table.organizationId, table.plotBusinessId),
+    orgIdIdx: index('farms_org_id_idx').on(table.organizationId),
+    farmerIdIdx: index('farms_farmer_id_idx').on(table.farmerId)
+  };
 });
 
 // --- Deliveries (Intake receipts) ---
@@ -108,6 +146,13 @@ export const deliveries = pgTable('deliveries', {
   associatedLotId: uuid('associated_lot_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgDeliveryRefUnique: uniqueIndex('deliveries_org_ref_unique').on(table.organizationId, table.deliveryRef),
+    orgIdIdx: index('deliveries_org_id_idx').on(table.organizationId),
+    farmerIdIdx: index('deliveries_farmer_id_idx').on(table.farmerId),
+    farmIdIdx: index('deliveries_farm_id_idx').on(table.farmId)
+  };
 });
 
 // --- Lots (Aggregated batches) ---
@@ -127,6 +172,11 @@ export const lots = pgTable('lots', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgLotNumberUnique: uniqueIndex('lots_org_lot_unique').on(table.organizationId, table.lotNumber),
+    orgIdIdx: index('lots_org_id_idx').on(table.organizationId)
+  };
 });
 
 // --- Lot to Delivery Junction ---
@@ -135,6 +185,11 @@ export const lotDeliveries = pgTable('lot_deliveries', {
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
   lotId: uuid('lot_id').references(() => lots.id, { onDelete: 'cascade' }).notNull(),
   deliveryId: uuid('delivery_id').references(() => deliveries.id, { onDelete: 'cascade' }).notNull()
+}, (table) => {
+  return {
+    lotDeliveryUnique: uniqueIndex('lot_deliv_unique').on(table.lotId, table.deliveryId),
+    orgIdIdx: index('lot_deliveries_org_id_idx').on(table.organizationId)
+  };
 });
 
 // --- Traceability Custody Events ---
@@ -150,6 +205,11 @@ export const traceabilityEvents = pgTable('traceability_events', {
   referenceDocNumber: text('reference_doc_number'),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    lotIdIdx: index('events_lot_id_idx').on(table.lotId),
+    orgIdIdx: index('events_org_id_idx').on(table.organizationId)
+  };
 });
 
 // --- Shipments ---
@@ -168,6 +228,11 @@ export const shipments = pgTable('shipments', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgExportRefUnique: uniqueIndex('shipments_org_ref_unique').on(table.organizationId, table.exportReference),
+    orgIdIdx: index('shipments_org_id_idx').on(table.organizationId)
+  };
 });
 
 // --- Shipment to Lot Junction ---
@@ -176,6 +241,11 @@ export const shipmentLots = pgTable('shipment_lots', {
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
   shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'cascade' }).notNull(),
   lotId: uuid('lot_id').references(() => lots.id, { onDelete: 'cascade' }).notNull()
+}, (table) => {
+  return {
+    shipmentLotUnique: uniqueIndex('shipment_lot_unique').on(table.shipmentId, table.lotId),
+    orgIdIdx: index('shipment_lots_org_id_idx').on(table.organizationId)
+  };
 });
 
 // --- Documents (Private metadata & physical storage pointer) ---
@@ -195,6 +265,11 @@ export const documents = pgTable('documents', {
   verificationStatus: text('verification_status').notNull().default('Pending Review'),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgIdIdx: index('documents_org_id_idx').on(table.organizationId),
+    relatedEntityIdx: index('documents_related_idx').on(table.relatedEntityType, table.relatedEntityId)
+  };
 });
 
 // --- Audit Logs ---
@@ -211,6 +286,11 @@ export const auditLogs = pgTable('audit_logs', {
   previousValue: text('previous_value'),
   newValue: text('new_value'),
   ipAddress: text('ip_address')
+}, (table) => {
+  return {
+    orgIdIdx: index('audit_org_id_idx').on(table.organizationId),
+    timestampIdx: index('audit_timestamp_idx').on(table.timestamp)
+  };
 });
 
 // --- Readiness Evaluation Cache & Versioning ---
@@ -230,11 +310,17 @@ export const readinessEvaluations = pgTable('readiness_evaluations', {
   passedCount: integer('passed_count').notNull(),
   evaluationData: jsonb('evaluation_data').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgShipmentIdx: index('eval_org_shipment_idx').on(table.organizationId, table.shipmentId),
+    createdAtIdx: index('eval_created_idx').on(table.createdAt)
+  };
 });
 
 // --- Relations ---
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   users: many(users),
+  invitations: many(organizationInvitations),
   farmers: many(farmers),
   farms: many(farms),
   deliveries: many(deliveries),
@@ -242,6 +328,13 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   shipments: many(shipments),
   documents: many(documents),
   auditLogs: many(auditLogs)
+}));
+
+export const organizationInvitationsRelations = relations(organizationInvitations, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationInvitations.organizationId],
+    references: [organizations.id]
+  })
 }));
 
 export const usersRelations = relations(users, ({ one }) => ({

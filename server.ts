@@ -54,6 +54,28 @@ async function startServer() {
   });
   app.use("/api/", generalLimiter);
 
+  // Stricter Rate Limiter for Onboarding and Auth mutations
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many authentication or onboarding requests, please try again in 15 minutes." }
+  });
+  app.use("/api/auth/", authLimiter);
+  app.use("/api/invitations", authLimiter);
+
+  // File Upload & Bulk Processing Limiter
+  const uploadLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "File upload rate limit reached, please try again in 15 minutes." }
+  });
+  app.use("/api/documents/upload", uploadLimiter);
+  app.use("/api/import/csv", uploadLimiter);
+
   // Health and Liveness Endpoint
   app.get("/api/health", (_req, res) => {
     res.json({

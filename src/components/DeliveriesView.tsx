@@ -109,18 +109,48 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
           </p>
         </div>
 
-        {currentUser.role !== 'viewer' && (
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => {
-              setReceiptNumber(`REC-UG-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-              setShowCreateModal(true);
+            onClick={async () => {
+              try {
+                const user = (await import('../lib/firebase')).auth.currentUser;
+                const token = user ? await user.getIdToken() : '';
+                const res = await fetch('/api/export/deliveries/csv', {
+                  headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                if (!res.ok) throw new Error('Failed to export CSV');
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `coffee-intake-deliveries-${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+              } catch (err: any) {
+                alert(err.message || 'Failed to export deliveries CSV');
+              }
             }}
-            className="bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+            className="bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold px-3 py-2 rounded border border-stone-300 flex items-center gap-1.5 transition-colors"
+            title="Download CSV export with formula-injection sanitization"
           >
-            <Plus className="w-4 h-4" />
-            Record Farmer Purchase
+            <FileText className="w-3.5 h-3.5 text-stone-600" />
+            Export CSV
           </button>
-        )}
+
+          {currentUser.role !== 'viewer' && (
+            <button
+              onClick={() => {
+                setReceiptNumber(`REC-UG-2026-${Math.floor(1000 + Math.random() * 9000)}`);
+                setShowCreateModal(true);
+              }}
+              className="bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              Record Farmer Purchase
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter Bar */}
