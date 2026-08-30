@@ -15,6 +15,13 @@ export function generateSecureToken(bytes: number = 24): string {
 }
 
 /**
+ * SHA-256 hash a sensitive token before persistence
+ */
+export function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
  * Generate secure Farmer Business ID (e.g. UG-F-84920)
  */
 export function generateFarmerId(district?: string): string {

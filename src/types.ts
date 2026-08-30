@@ -300,3 +300,42 @@ export interface CsvImportRow {
   warnings: string[];
   isValid: boolean;
 }
+
+export type SubscriptionStatus = 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended';
+export type PaymentStatus = 'pending' | 'successful' | 'failed' | 'refunded';
+export type PaymentMethod = 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD' | 'BANK_TRANSFER';
+
+export interface Subscription {
+  id: string;
+  organizationId: string;
+  planId: 'starter' | 'professional' | 'enterprise';
+  planName: string;
+  status: SubscriptionStatus;
+  billingCycle: 'monthly' | 'annual';
+  amountUgx: number;
+  currency: string;
+  maxFarmers: number;
+  maxFarms: number;
+  maxShipmentsMonthly: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  featuresJson?: any;
+}
+
+export interface PaymentRecord {
+  id: string;
+  organizationId: string;
+  subscriptionId?: string;
+  amountUgx: number;
+  currency: string;
+  paymentMethod: PaymentMethod;
+  provider: string;
+  providerTransactionId?: string;
+  idempotencyKey: string;
+  status: PaymentStatus;
+  phoneNumber?: string;
+  payerEmail?: string;
+  description: string;
+  createdAt: string;
+}

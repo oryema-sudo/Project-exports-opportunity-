@@ -14,7 +14,12 @@ import {
   Trash2,
   Copy,
   AlertTriangle,
-  FileText
+  FileText,
+  Smartphone,
+  CheckCircle2,
+  RefreshCw,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
 
 interface OrganizationModalProps {
@@ -27,7 +32,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
   const state = appStore.getState();
   const activeOrg = state.organizations.find(o => o.id === state.activeOrgId) || state.organizations[0];
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'team' | 'regulatory'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'team' | 'billing' | 'regulatory'>('profile');
 
   // Org form state
   const [legalName, setLegalName] = useState<string>(activeOrg.legalName);
@@ -47,9 +52,26 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
   const [teamError, setTeamError] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
+  // Billing & Subscriptions state
+  const [subData, setSubData] = useState<any>(null);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingBilling, setLoadingBilling] = useState<boolean>(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+
+  // Payment Checkout Form
+  const [selectedCheckoutPlan, setSelectedCheckoutPlan] = useState<'starter' | 'professional' | 'enterprise'>('professional');
+  const [checkoutCycle, setCheckoutCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [checkoutMethod, setCheckoutMethod] = useState<'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD'>('MTN_MOMO');
+  const [momoPhone, setMomoPhone] = useState<string>(activeOrg.contactPhone || '0772123456');
+  const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
+  const [activePaymentPrompt, setActivePaymentPrompt] = useState<any>(null);
+  const [paymentSuccessMsg, setPaymentSuccessMsg] = useState<string | null>(null);
+
   useEffect(() => {
     if (activeTab === 'team') {
       loadTeamAndInvites();
+    } else if (activeTab === 'billing') {
+      loadBillingData();
     }
   }, [activeTab]);
 
@@ -67,6 +89,62 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
       setTeamError(err.message || 'Failed to load team members');
     } finally {
       setLoadingTeam(false);
+    }
+  };
+
+  const loadBillingData = async () => {
+    setLoadingBilling(true);
+    setBillingError(null);
+    try {
+      const [subscriptionRes, paymentsRes] = await Promise.all([
+        api.getSubscription().catch(() => null),
+        api.getPayments().catch(() => [])
+      ]);
+      setSubData(subscriptionRes);
+      setPaymentHistory(paymentsRes);
+    } catch (err: any) {
+      setBillingError(err.message || 'Failed to load billing status');
+    } finally {
+      setLoadingBilling(false);
+    }
+  };
+
+  const handleInitiatePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsProcessingPayment(true);
+    setBillingError(null);
+    setPaymentSuccessMsg(null);
+    try {
+      const idempotencyKey = `pay-${activeOrg.id}-${Date.now()}`;
+      const result = await api.initiatePayment({
+        planId: selectedCheckoutPlan,
+        billingCycle: checkoutCycle,
+        paymentMethod: checkoutMethod,
+        phoneNumber: momoPhone,
+        payerEmail: contactEmail,
+        idempotencyKey
+      });
+
+      setActivePaymentPrompt(result);
+    } catch (err: any) {
+      setBillingError(err.message || 'Payment initiation failed');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handleVerifyPayment = async () => {
+    if (!activePaymentPrompt) return;
+    setIsProcessingPayment(true);
+    try {
+      const verifyRes = await api.verifyPayment(activePaymentPrompt.paymentId);
+      setPaymentSuccessMsg(verifyRes.message || 'Payment verified and plan activated successfully!');
+      setActivePaymentPrompt(null);
+      await loadBillingData();
+    } catch (err: any) {
+      setBillingError(err.message || 'Failed to verify transaction confirmation');
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -121,14 +199,14 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full p-6 border border-stone-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-xs">
+      <div className="bg-white rounded-lg max-w-3xl w-full p-6 border border-stone-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-xs">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-stone-100 pb-3">
           <div className="flex items-center gap-2">
             <Building2 className="w-5 h-5 text-emerald-700" />
             <div>
-              <h2 className="font-bold text-base text-stone-900">Organization Settings & Multi-Tenant Workspace</h2>
+              <h2 className="font-bold text-base text-stone-900">Organization Settings & Commercial Hub</h2>
               <p className="text-[11px] text-stone-500">Tenant identifier: <span className="font-mono font-bold text-stone-800">{activeOrg.id}</span></p>
             </div>
           </div>
@@ -138,10 +216,10 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-stone-200 pb-2">
+        <div className="flex gap-2 border-b border-stone-200 pb-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('profile')}
-            className={`px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 whitespace-nowrap transition-colors ${
               activeTab === 'profile' ? 'bg-emerald-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
             }`}
           >
@@ -150,7 +228,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('team')}
-            className={`px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 whitespace-nowrap transition-colors ${
               activeTab === 'team' ? 'bg-emerald-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
             }`}
           >
@@ -158,8 +236,17 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
             Staff & Invitations
           </button>
           <button
+            onClick={() => setActiveTab('billing')}
+            className={`px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+              activeTab === 'billing' ? 'bg-emerald-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5" />
+            Subscription & MoMo Billing
+          </button>
+          <button
             onClick={() => setActiveTab('regulatory')}
-            className={`px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 whitespace-nowrap transition-colors ${
               activeTab === 'regulatory' ? 'bg-emerald-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
             }`}
           >
@@ -168,7 +255,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
           </button>
         </div>
 
-        {/* Tab 1: Profile & Subscription */}
+        {/* Tab 1: Profile */}
         {activeTab === 'profile' && (
           <form onSubmit={handleSave} className="space-y-4">
             <div className="bg-stone-50 p-3 rounded border border-stone-200 grid grid-cols-2 gap-3">
@@ -238,48 +325,6 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
                   onChange={(e) => setContactPhone(e.target.value)}
                   className="w-full bg-white border border-stone-300 rounded px-2.5 py-1.5 focus:ring-1 focus:ring-emerald-600 focus:outline-none font-mono"
                 />
-              </div>
-            </div>
-
-            {/* SaaS Subscription Plans */}
-            <div className="space-y-2 pt-2 border-t border-stone-100">
-              <label className="block text-stone-700 font-bold uppercase tracking-wider text-[11px]">
-                SaaS Subscription Tier
-              </label>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div
-                  onClick={() => setSelectedPlan('Starter')}
-                  className={`p-3 rounded border cursor-pointer transition-all ${
-                    selectedPlan === 'Starter' ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-stone-50 border-stone-200'
-                  }`}
-                >
-                  <div className="font-bold text-stone-900">Starter</div>
-                  <div className="text-[10px] text-stone-500 font-mono">UGX 450,000 / mo</div>
-                  <div className="text-[10px] text-stone-600 mt-1">Up to 500 smallholders</div>
-                </div>
-
-                <div
-                  onClick={() => setSelectedPlan('Pro')}
-                  className={`p-3 rounded border cursor-pointer transition-all ${
-                    selectedPlan === 'Pro' ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-stone-50 border-stone-200'
-                  }`}
-                >
-                  <div className="font-bold text-stone-900">Pro (Exporters)</div>
-                  <div className="text-[10px] text-stone-500 font-mono">UGX 1,800,000 / mo</div>
-                  <div className="text-[10px] text-stone-600 mt-1">Unlimited plots & polygons</div>
-                </div>
-
-                <div
-                  onClick={() => setSelectedPlan('Enterprise')}
-                  className={`p-3 rounded border cursor-pointer transition-all ${
-                    selectedPlan === 'Enterprise' ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-stone-50 border-stone-200'
-                  }`}
-                >
-                  <div className="font-bold text-stone-900">Enterprise</div>
-                  <div className="text-[10px] text-stone-500 font-mono">Custom Contract</div>
-                  <div className="text-[10px] text-stone-600 mt-1">Multi-mill ERP integration</div>
-                </div>
               </div>
             </div>
 
@@ -458,7 +503,331 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
           </div>
         )}
 
-        {/* Tab 3: Regulatory Positioning & Disclaimer */}
+        {/* Tab 3: Commercial Billing & MoMo Payments */}
+        {activeTab === 'billing' && (
+          <div className="space-y-4">
+            {billingError && (
+              <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-200 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{billingError}</span>
+              </div>
+            )}
+
+            {paymentSuccessMsg && (
+              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded border border-emerald-200 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-bold">{paymentSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Current Tier & Quotas */}
+            <div className="bg-stone-50 p-3.5 rounded-lg border border-stone-200 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 pb-2.5">
+                <div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-stone-500">Active Subscription</span>
+                  <div className="text-sm font-black text-stone-900 flex items-center gap-2">
+                    <span>{subData?.subscription?.planName || activeOrg.subscriptionPlan || 'Professional (Exporters)'}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase">
+                      {subData?.subscription?.status || 'Active'}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-stone-500">Billing Period</span>
+                  <div className="font-mono text-xs font-bold text-stone-800">
+                    {subData?.subscription?.billingCycle === 'annual' ? 'Annual (15% Savings)' : 'Monthly'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Usage Quota Progress Bars */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="bg-white p-2.5 rounded border border-stone-200">
+                  <div className="flex justify-between text-[11px] font-bold mb-1">
+                    <span className="text-stone-600">Registered Farmers</span>
+                    <span className="font-mono text-emerald-800">
+                      {subData?.usage?.currentFarmers || state.farmers.length} / {subData?.usage?.maxFarmers || 5000}
+                    </span>
+                  </div>
+                  <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-emerald-600 h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((subData?.usage?.currentFarmers || state.farmers.length) / (subData?.usage?.maxFarmers || 5000)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-stone-200">
+                  <div className="flex justify-between text-[11px] font-bold mb-1">
+                    <span className="text-stone-600">Farm GPS Plots</span>
+                    <span className="font-mono text-emerald-800">
+                      {subData?.usage?.currentFarms || state.farms.length} / {subData?.usage?.maxFarms || 10000}
+                    </span>
+                  </div>
+                  <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-emerald-600 h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((subData?.usage?.currentFarms || state.farms.length) / (subData?.usage?.maxFarms || 10000)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-white p-2.5 rounded border border-stone-200">
+                  <div className="flex justify-between text-[11px] font-bold mb-1">
+                    <span className="text-stone-600">Monthly Shipments</span>
+                    <span className="font-mono text-emerald-800">
+                      {subData?.usage?.currentShipments || state.shipments.length} / {subData?.usage?.maxShipments || 50}
+                    </span>
+                  </div>
+                  <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-emerald-600 h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((subData?.usage?.currentShipments || state.shipments.length) / (subData?.usage?.maxShipments || 50)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Money / Card Checkout Drawer */}
+            <form onSubmit={handleInitiatePayment} className="border border-stone-200 rounded-lg p-4 bg-white space-y-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-stone-900 flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-emerald-700" />
+                  <span>Upgrade or Renew with Mobile Money (Uganda)</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutCycle('monthly')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                      checkoutCycle === 'monthly' ? 'bg-emerald-800 text-white' : 'bg-stone-100 text-stone-600'
+                    }`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutCycle('annual')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                      checkoutCycle === 'annual' ? 'bg-emerald-800 text-white' : 'bg-stone-100 text-stone-600'
+                    }`}
+                  >
+                    Annual (Save 15%)
+                  </button>
+                </div>
+              </div>
+
+              {/* Plan Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div
+                  onClick={() => setSelectedCheckoutPlan('starter')}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedCheckoutPlan === 'starter' ? 'bg-emerald-50/80 border-emerald-600 ring-2 ring-emerald-600/50' : 'bg-stone-50 border-stone-200'
+                  }`}
+                >
+                  <div className="font-bold text-stone-900">Starter Plan</div>
+                  <div className="text-emerald-800 font-mono font-bold text-xs mt-0.5">
+                    {checkoutCycle === 'annual' ? 'UGX 2,550,000 / yr' : 'UGX 250,000 / mo'}
+                  </div>
+                  <div className="text-[10px] text-stone-600 mt-1">Up to 500 smallholders, 5 shipments/mo</div>
+                </div>
+
+                <div
+                  onClick={() => setSelectedCheckoutPlan('professional')}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedCheckoutPlan === 'professional' ? 'bg-emerald-50/80 border-emerald-600 ring-2 ring-emerald-600/50' : 'bg-stone-50 border-stone-200'
+                  }`}
+                >
+                  <div className="font-bold text-stone-900 flex items-center justify-between">
+                    <span>Professional</span>
+                    <span className="text-[9px] bg-emerald-700 text-white px-1.5 py-0.2 rounded font-bold">POPULAR</span>
+                  </div>
+                  <div className="text-emerald-800 font-mono font-bold text-xs mt-0.5">
+                    {checkoutCycle === 'annual' ? 'UGX 6,120,000 / yr' : 'UGX 600,000 / mo'}
+                  </div>
+                  <div className="text-[10px] text-stone-600 mt-1">Up to 5,000 farmers, polygon mapping, 50 shipments</div>
+                </div>
+
+                <div
+                  onClick={() => setSelectedCheckoutPlan('enterprise')}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedCheckoutPlan === 'enterprise' ? 'bg-emerald-50/80 border-emerald-600 ring-2 ring-emerald-600/50' : 'bg-stone-50 border-stone-200'
+                  }`}
+                >
+                  <div className="font-bold text-stone-900">Enterprise</div>
+                  <div className="text-emerald-800 font-mono font-bold text-xs mt-0.5">
+                    {checkoutCycle === 'annual' ? 'UGX 18,360,000 / yr' : 'UGX 1,800,000 / mo'}
+                  </div>
+                  <div className="text-[10px] text-stone-600 mt-1">Unlimited farmers, dedicated API gateway, ERP sync</div>
+                </div>
+              </div>
+
+              {/* Payment Methods */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMethod('MTN_MOMO')}
+                  className={`p-2 rounded border font-semibold text-left flex items-center gap-2 ${
+                    checkoutMethod === 'MTN_MOMO' ? 'bg-amber-50 border-amber-500 text-amber-950 ring-1 ring-amber-500' : 'bg-stone-50 border-stone-200 text-stone-700'
+                  }`}
+                >
+                  <span className="w-3 h-3 rounded-full bg-amber-400"></span>
+                  <div>
+                    <div className="font-bold">MTN Mobile Money</div>
+                    <div className="text-[10px] text-stone-500">UG Dial *165# prompt</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMethod('AIRTEL_MONEY')}
+                  className={`p-2 rounded border font-semibold text-left flex items-center gap-2 ${
+                    checkoutMethod === 'AIRTEL_MONEY' ? 'bg-red-50 border-red-500 text-red-950 ring-1 ring-red-500' : 'bg-stone-50 border-stone-200 text-stone-700'
+                  }`}
+                >
+                  <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                  <div>
+                    <div className="font-bold">Airtel Money</div>
+                    <div className="text-[10px] text-stone-500">UG Dial *185# prompt</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMethod('CARD')}
+                  className={`p-2 rounded border font-semibold text-left flex items-center gap-2 ${
+                    checkoutMethod === 'CARD' ? 'bg-blue-50 border-blue-500 text-blue-950 ring-1 ring-blue-500' : 'bg-stone-50 border-stone-200 text-stone-700'
+                  }`}
+                >
+                  <CreditCard className="w-4 h-4 text-blue-600" />
+                  <div>
+                    <div className="font-bold">Visa / Mastercard</div>
+                    <div className="text-[10px] text-stone-500">International Gateway</div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Phone / Details Row */}
+              <div className="flex gap-2 pt-1 items-center">
+                <div className="flex-1">
+                  <label className="block text-[11px] font-bold text-stone-700 mb-0.5">
+                    {checkoutMethod === 'CARD' ? 'Billing Contact Phone' : 'Uganda Mobile Money MSISDN (07X...)'}
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={momoPhone}
+                    onChange={(e) => setMomoPhone(e.target.value)}
+                    placeholder="0772123456"
+                    className="w-full bg-white border border-stone-300 rounded px-2.5 py-1.5 text-xs font-mono font-bold focus:ring-1 focus:ring-emerald-600 focus:outline-none"
+                  />
+                </div>
+                <div className="pt-4 shrink-0">
+                  <button
+                    type="submit"
+                    disabled={isProcessingPayment}
+                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    {isProcessingPayment ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                    <span>Initiate Payment</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Prompt Modal / Card */}
+              {activePaymentPrompt && (
+                <div className="p-3.5 bg-emerald-950 text-emerald-100 rounded-lg border border-emerald-800 space-y-2 mt-3 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-emerald-300 flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4 text-amber-400 animate-pulse" />
+                      Mobile Money Authorization Prompt Dispatched
+                    </span>
+                    <span className="font-mono text-xs font-bold text-amber-300">
+                      UGX {activePaymentPrompt.amountUgx?.toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-200 leading-normal">
+                    {activePaymentPrompt.instructions}
+                  </p>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-[10px] font-mono text-emerald-400">
+                      Ref: {activePaymentPrompt.providerTransactionId}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleVerifyPayment}
+                      disabled={isProcessingPayment}
+                      className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold rounded text-xs transition-colors flex items-center gap-1"
+                    >
+                      {isProcessingPayment ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      <span>Confirm & Activate Plan</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </form>
+
+            {/* Payment Receipts Ledger */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-stone-900">Commercial Invoices & Payment Ledger</h3>
+                <button
+                  type="button"
+                  onClick={loadBillingData}
+                  className="text-stone-500 hover:text-stone-800 text-[10px] flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> Refresh
+                </button>
+              </div>
+              <div className="border border-stone-200 rounded overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="bg-stone-100 text-stone-600 border-b border-stone-200 text-[10px] uppercase font-bold">
+                    <tr>
+                      <th className="p-2">Date</th>
+                      <th className="p-2">Description</th>
+                      <th className="p-2">Method</th>
+                      <th className="p-2">Amount</th>
+                      <th className="p-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {paymentHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-3 text-stone-400 text-center">
+                          {loadingBilling ? 'Loading payments...' : 'No external payment records yet. Initiate an upgrade above.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      paymentHistory.map((p) => (
+                        <tr key={p.id} className="hover:bg-stone-50">
+                          <td className="p-2 font-mono text-stone-600">
+                            {new Date(p.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="p-2 font-bold text-stone-900">{p.description}</td>
+                          <td className="p-2 font-mono text-stone-600">{p.paymentMethod}</td>
+                          <td className="p-2 font-mono font-bold text-stone-900">
+                            UGX {Number(p.amountUgx).toLocaleString()}
+                          </td>
+                          <td className="p-2">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              p.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                              p.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {p.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Regulatory Positioning & Disclaimer */}
         {activeTab === 'regulatory' && (
           <div className="space-y-3 p-4 bg-stone-50 border border-stone-200 rounded leading-relaxed text-stone-700">
             <div className="flex items-center gap-2 text-stone-900 font-bold text-sm">

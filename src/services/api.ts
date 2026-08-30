@@ -441,5 +441,72 @@ export const api = {
       throw new Error(err.error || 'Failed to import CSV');
     }
     return res.json();
+  },
+
+  // Subscriptions & Payments
+  async getSubscription(): Promise<{
+    subscription: any;
+    usage: any;
+    plans: any;
+  }> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/subscription', { headers });
+    if (!res.ok) throw new Error('Failed to fetch subscription');
+    return res.json();
+  },
+
+  async initiatePayment(data: {
+    planId: 'starter' | 'professional' | 'enterprise';
+    billingCycle: 'monthly' | 'annual';
+    paymentMethod: 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD' | 'BANK_TRANSFER';
+    phoneNumber?: string;
+    payerEmail?: string;
+    idempotencyKey: string;
+  }): Promise<{
+    success: boolean;
+    paymentId: string;
+    providerTransactionId: string;
+    amountUgx: number;
+    currency: string;
+    status: string;
+    instructions: string;
+  }> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/payments/initiate', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to initiate payment');
+    }
+    return res.json();
+  },
+
+  async verifyPayment(paymentId: string): Promise<{
+    success: boolean;
+    message: string;
+    payment: any;
+    subscription: any;
+  }> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/payments/verify', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ paymentId })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to verify payment');
+    }
+    return res.json();
+  },
+
+  async getPayments(): Promise<any[]> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/payments', { headers });
+    if (!res.ok) throw new Error('Failed to fetch payment history');
+    return res.json();
   }
 };

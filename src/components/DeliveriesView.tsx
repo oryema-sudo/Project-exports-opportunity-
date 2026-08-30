@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Delivery, CoffeeType, CoffeeGrade } from '../types';
 import { AppState, appStore } from '../services/store';
 import { 
@@ -11,7 +11,8 @@ import {
   FileText, 
   CheckCircle2, 
   Scale, 
-  DollarSign
+  DollarSign,
+  AlertCircle
 } from 'lucide-react';
 
 interface DeliveriesViewProps {
@@ -23,14 +24,14 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
   state,
   searchQuery
 }) => {
-  const { deliveries, farmers, farms, lots, currentUser } = state;
+  const { deliveries = [], farmers = [], farms = [], lots = [], currentUser } = state || {};
   const [filterCoffeeType, setFilterCoffeeType] = useState<string>('ALL');
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
 
   // New Delivery Form State
   const [receiptNumber, setReceiptNumber] = useState<string>(`REC-UG-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-  const [selectedFarmerId, setSelectedFarmerId] = useState<string>(farmers[0]?.id || '');
-  const [selectedFarmId, setSelectedFarmId] = useState<string>(farms[0]?.id || '');
+  const [selectedFarmerId, setSelectedFarmerId] = useState<string>('');
+  const [selectedFarmId, setSelectedFarmId] = useState<string>('');
   const [coffeeType, setCoffeeType] = useState<CoffeeType>('Robusta');
   const [grade, setGrade] = useState<CoffeeGrade>('FAQ (Fair Average Quality)');
   const [quantityKg, setQuantityKg] = useState<string>('850');
@@ -38,42 +39,61 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
   const [moistureContentPercent, setMoistureContentPercent] = useState<string>('13.5');
   const [pricePerKgUgx, setPricePerKgUgx] = useState<string>('7200');
   const [buyingDepot, setBuyingDepot] = useState<string>('Masaka Regional Buying Station');
-  const [purchasedBy, setPurchasedBy] = useState<string>(currentUser.name);
+  const [purchasedBy, setPurchasedBy] = useState<string>(currentUser?.name || 'Buying Officer');
   const [notes, setNotes] = useState<string>('Dry cherry (kiboko) good quality, low black bean ratio.');
+
+  // Sync initial farmer and farm selections when state updates
+  useEffect(() => {
+    if (farmers.length > 0 && (!selectedFarmerId || !farmers.some(f => f.id === selectedFarmerId))) {
+      const firstFarmer = farmers[0];
+      setSelectedFarmerId(firstFarmer.id);
+      const matchingFarms = farms.filter(f => f.farmerId === firstFarmer.id);
+      if (matchingFarms.length > 0) {
+        setSelectedFarmId(matchingFarms[0].id);
+      } else if (farms.length > 0) {
+        setSelectedFarmId(farms[0].id);
+      }
+    }
+  }, [farmers, farms, selectedFarmerId]);
 
   // Update farm options when farmer changes
   const farmerFarms = farms.filter(f => f.farmerId === selectedFarmerId);
 
-  const filteredDeliveries = deliveries.filter(d => {
+  const filteredDeliveries = (deliveries || []).filter(d => {
+    if (!d) return false;
     if (filterCoffeeType !== 'ALL' && d.coffeeType !== filterCoffeeType) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const farmer = farmers.find(f => f.id === d.farmerId);
+      const receipt = String(d.receiptNumber || (d as any).deliveryRef || '');
+      const depot = String(d.buyingDepot || (d as any).buyingLocation || '');
+      const farmerName = String(farmer?.fullName || '');
+      const gradeStr = String(d.grade || '');
       return (
-        d.receiptNumber.toLowerCase().includes(q) ||
-        d.buyingDepot.toLowerCase().includes(q) ||
-        farmer?.fullName.toLowerCase().includes(q) ||
-        d.grade.toLowerCase().includes(q)
+        receipt.toLowerCase().includes(q) ||
+        depot.toLowerCase().includes(q) ||
+        farmerName.toLowerCase().includes(q) ||
+        gradeStr.toLowerCase().includes(q)
       );
     }
     return true;
   });
 
-  const totalDeliveredKg = deliveries.reduce((sum, d) => sum + d.quantityKg, 0);
+  const totalDeliveredKg = (deliveries || []).reduce((sum, d) => sum + (Number(d?.quantityKg) || 0), 0);
 
-  const handleCreateDelivery = (e: React.FormEvent) => {
+  const handleCreateDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFarmerId || !selectedFarmId) {
       alert('Please select both a registered smallholder and their farm parcel.');
       return;
     }
 
-    const qty = parseFloat(quantityKg);
+    const qty = parseFloat(quantityKg) || 100;
     const bags = parseInt(numberOfBags) || Math.round(qty / 60);
     const moisture = parseFloat(moistureContentPercent) || 13.0;
     const price = parseInt(pricePerKgUgx) || 7000;
 
-    appStore.addDelivery({
+    await appStore.addDelivery({
       farmerId: selectedFarmerId,
       farmId: selectedFarmId,
       deliveryDate: new Date().toISOString().split('T')[0],
@@ -86,7 +106,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
       totalPaymentUgx: qty * price,
       buyingDepot,
       receiptNumber,
-      purchasedBy,
+      purchasedBy: purchasedBy || currentUser?.name || 'Buying Officer',
       notes,
       documentIds: []
     });
@@ -138,10 +158,15 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
             Export CSV
           </button>
 
-          {currentUser.role !== 'viewer' && (
+          {currentUser?.role !== 'viewer' && (
             <button
               onClick={() => {
                 setReceiptNumber(`REC-UG-2026-${Math.floor(1000 + Math.random() * 9000)}`);
+                if (farmers.length > 0 && !selectedFarmerId) {
+                  setSelectedFarmerId(farmers[0].id);
+                  const matching = farms.filter(f => f.farmerId === farmers[0].id);
+                  if (matching.length > 0) setSelectedFarmId(matching[0].id);
+                }
                 setShowCreateModal(true);
               }}
               className="bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-auto"
@@ -192,50 +217,73 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {filteredDeliveries.map(del => {
-                const farmer = farmers.find(f => f.id === del.farmerId);
-                const farm = farms.find(f => f.id === del.farmId);
-                const linkedLot = lots.find(l => l.id === del.associatedLotId);
+              {filteredDeliveries.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-stone-500">
+                    <AlertCircle className="w-6 h-6 mx-auto text-stone-400 mb-2" />
+                    <p className="font-semibold">No smallholder purchase receipts found</p>
+                    <p className="text-[11px] text-stone-400 mt-1">Record a farmer purchase or import delivery tickets to populate this intake ledger.</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredDeliveries.map(del => {
+                  const farmer = farmers.find(f => f.id === del.farmerId);
+                  const farm = farms.find(f => f.id === del.farmId);
+                  const linkedLot = lots.find(l => l.id === del.associatedLotId);
 
-                return (
-                  <tr key={del.id} className="hover:bg-stone-50 transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-stone-900 font-mono">{del.receiptNumber}</div>
-                      <div className="text-[10px] text-stone-400">{del.deliveryDate}</div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-stone-900">{farmer?.fullName || 'Unknown'}</div>
-                      <div className="text-[10px] text-stone-500 font-mono">{farmer?.nationalId || farmer?.farmerRegId}</div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="text-stone-800 font-medium">{farm?.farmName || 'Default Plot'}</div>
-                      <div className="text-[10px] text-stone-500">{farm?.district} ({farm?.latitude.toFixed(3)}°, {farm?.longitude.toFixed(3)}°)</div>
-                    </td>
-                    <td className="py-3 px-3 font-mono font-bold text-stone-900">
-                      {del.quantityKg.toLocaleString()} kg
-                      <span className="text-[10px] text-stone-400 font-normal ml-1">({del.numberOfBags} bags)</span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="font-bold text-stone-800">{del.coffeeType} - {del.grade}</span>
-                      <div className="text-[10px] text-stone-500">Moisture: {del.moistureContentPercent}%</div>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-stone-800">
-                      UGX {del.totalPaymentUgx.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-3">
-                      {linkedLot ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                          Lot: {linkedLot.lotNumber}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                          Unassigned
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                  const lat = farm?.latitude !== undefined && farm?.latitude !== null && !isNaN(Number(farm.latitude))
+                    ? Number(farm.latitude).toFixed(3)
+                    : null;
+                  const lon = farm?.longitude !== undefined && farm?.longitude !== null && !isNaN(Number(farm.longitude))
+                    ? Number(farm.longitude).toFixed(3)
+                    : null;
+
+                  const locString = lat && lon ? `(${lat}°, ${lon}°)` : '';
+
+                  const qty = Number(del.quantityKg) || 0;
+                  const bags = del.numberOfBags || Math.ceil(qty / 60);
+                  const totalUgx = Number(del.totalPaymentUgx) || (qty * (Number(del.pricePerKgUgx) || 7200));
+
+                  return (
+                    <tr key={del.id} className="hover:bg-stone-50 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-stone-900 font-mono">{del.receiptNumber || (del as any).deliveryRef || 'REC-N/A'}</div>
+                        <div className="text-[10px] text-stone-400">{del.deliveryDate || del.dateReceived || '—'}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-stone-900">{farmer?.fullName || 'Unknown Smallholder'}</div>
+                        <div className="text-[10px] text-stone-500 font-mono">{farmer?.nationalId || farmer?.farmerRegId || 'NIN Pending'}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="text-stone-800 font-medium">{farm?.farmName || 'Primary Parcel'}</div>
+                        <div className="text-[10px] text-stone-500">{farm?.district || 'Uganda'} {locString}</div>
+                      </td>
+                      <td className="py-3 px-3 font-mono font-bold text-stone-900">
+                        {qty.toLocaleString()} kg
+                        <span className="text-[10px] text-stone-400 font-normal ml-1">({bags} bags)</span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-stone-800">{del.coffeeType} - {del.grade}</span>
+                        <div className="text-[10px] text-stone-500">Moisture: {del.moistureContentPercent || 13.0}%</div>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-stone-800">
+                        UGX {totalUgx.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-3">
+                        {linkedLot ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            Lot: {linkedLot.lotNumber}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -274,15 +322,23 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                   onChange={(e) => {
                     setSelectedFarmerId(e.target.value);
                     const matchingFarms = farms.filter(f => f.farmerId === e.target.value);
-                    if (matchingFarms.length > 0) setSelectedFarmId(matchingFarms[0].id);
+                    if (matchingFarms.length > 0) {
+                      setSelectedFarmId(matchingFarms[0].id);
+                    } else {
+                      setSelectedFarmId('');
+                    }
                   }}
                   className="w-full bg-white border border-stone-300 rounded px-2.5 py-1.5 focus:ring-1 focus:ring-emerald-600 focus:outline-none font-semibold"
                 >
-                  {farmers.map(f => (
-                    <option key={f.id} value={f.id}>
-                      {f.fullName} — {f.district} (NIN: {f.nationalId || f.farmerRegId})
-                    </option>
-                  ))}
+                  {farmers.length === 0 ? (
+                    <option value="">No registered farmers available</option>
+                  ) : (
+                    farmers.map(f => (
+                      <option key={f.id} value={f.id}>
+                        {f.fullName} — {f.district} (NIN: {f.nationalId || f.farmerRegId})
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -299,8 +355,14 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                         {f.farmName} — {f.district} ({f.plotArea} Ha, {f.geometryType})
                       </option>
                     ))
+                  ) : farms.length > 0 ? (
+                    farms.map(f => (
+                      <option key={f.id} value={f.id}>
+                        {f.farmName} — {f.district} ({f.plotArea} Ha)
+                      </option>
+                    ))
                   ) : (
-                    <option value="">No farm plots registered for this farmer</option>
+                    <option value="">No farm plots registered</option>
                   )}
                 </select>
               </div>
@@ -400,7 +462,8 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white font-bold transition-colors"
+                  disabled={farmers.length === 0}
+                  className="px-4 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white font-bold transition-colors disabled:opacity-50"
                 >
                   Save Intake & Issue Receipt
                 </button>

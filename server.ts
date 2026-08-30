@@ -7,6 +7,8 @@ import { v4 as uuidv4 } from "uuid";
 import { apiRouter } from "./src/server/apiRouter.ts";
 import { seedOrganizationData } from "./src/server/seedDatabase.ts";
 import { requireAuth, AuthRequest } from "./src/middleware/auth.ts";
+import { createPool } from "./src/db/index.ts";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 
 async function startServer() {
@@ -15,9 +17,27 @@ async function startServer() {
 
   // Request ID & Structured Logging Middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
+    const startTime = Date.now();
     const reqId = (req.headers["x-request-id"] as string) || uuidv4();
     res.setHeader("X-Request-ID", reqId);
     (req as any).id = reqId;
+
+    res.on("finish", () => {
+      const duration = Date.now() - startTime;
+      if (req.path.startsWith("/api/")) {
+        console.log(JSON.stringify({
+          type: "HTTP_ACCESS",
+          requestId: reqId,
+          method: req.method,
+          path: req.path,
+          status: res.statusCode,
+          durationMs: duration,
+          ip: req.ip || req.socket.remoteAddress || "unknown",
+          timestamp: new Date().toISOString()
+        }));
+      }
+    });
+
     next();
   });
 
@@ -85,6 +105,45 @@ async function startServer() {
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     });
+  });
+
+  // Critical Dependency Readiness Probe (/api/ready)
+  app.get("/api/ready", async (_req, res) => {
+    const checks: { database: boolean; storage: boolean; error?: string } = {
+      database: false,
+      storage: false
+    };
+
+    try {
+      // 1. PostgreSQL DB Query Probe
+      const pool = createPool();
+      const dbRes = await pool.query("SELECT 1 AS ready");
+      checks.database = dbRes.rows.length > 0 && dbRes.rows[0].ready === 1;
+
+      // 2. Private Storage Directory Writability Probe
+      const storageRoot = path.join(process.cwd(), "private_storage");
+      if (!fs.existsSync(storageRoot)) {
+        fs.mkdirSync(storageRoot, { recursive: true });
+      }
+      const testFile = path.join(storageRoot, `.ready_check_${Date.now()}`);
+      fs.writeFileSync(testFile, "probe");
+      fs.unlinkSync(testFile);
+      checks.storage = true;
+
+      res.json({
+        status: "ready",
+        checks,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      console.error("[Readiness Probe] Dependency check failed:", err.message || err);
+      checks.error = err.message || "Failed readiness checks";
+      res.status(503).json({
+        status: "unavailable",
+        checks,
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 
   // Regulatory disclosure endpoint

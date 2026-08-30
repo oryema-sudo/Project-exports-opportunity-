@@ -39,13 +39,13 @@ export const users = pgTable('users', {
   };
 });
 
-// --- Organization Invitations (Secure Multi-tenant onboarding) ---
+// --- Organization Invitations (Secure Multi-tenant onboarding with hashed tokens) ---
 export const organizationInvitations = pgTable('organization_invitations', {
   id: uuid('id').defaultRandom().primaryKey(),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
   email: text('email').notNull(),
   role: text('role').notNull().default('staff'), // 'admin' | 'staff' | 'viewer'
-  token: text('token').notNull().unique(),
+  tokenHash: text('token_hash').notNull().unique(), // SHA-256 hash of the one-time raw token
   invitedByName: text('invited_by_name').notNull(),
   invitedByUserId: text('invited_by_user_id'),
   status: text('status').notNull().default('pending'), // 'pending' | 'accepted' | 'revoked' | 'expired'
@@ -55,7 +55,7 @@ export const organizationInvitations = pgTable('organization_invitations', {
 }, (table) => {
   return {
     orgIdx: index('invitations_org_idx').on(table.organizationId),
-    tokenIdx: uniqueIndex('invitations_token_idx').on(table.token),
+    tokenHashIdx: uniqueIndex('invitations_token_hash_idx').on(table.tokenHash),
     emailIdx: index('invitations_email_idx').on(table.email)
   };
 });
@@ -317,6 +317,60 @@ export const readinessEvaluations = pgTable('readiness_evaluations', {
   };
 });
 
+// --- Subscriptions (Commercial tier management) ---
+export const subscriptions = pgTable('subscriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
+  planId: text('plan_id').notNull(), // 'starter' | 'professional' | 'enterprise'
+  planName: text('plan_name').notNull().default('Professional Exporter'),
+  status: text('status').notNull().default('active'), // 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended'
+  billingCycle: text('billing_cycle').notNull().default('monthly'), // 'monthly' | 'annual'
+  amountUgx: numeric('amount_ugx', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('UGX'),
+  maxFarmers: integer('max_farmers').notNull().default(5000),
+  maxFarms: integer('max_farms').notNull().default(10000),
+  maxShipmentsMonthly: integer('max_shipments_monthly').notNull().default(50),
+  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }).defaultNow().notNull(),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }).notNull(),
+  cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+  featuresJson: jsonb('features_json'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgIdx: index('subscriptions_org_idx').on(table.organizationId),
+    statusIdx: index('subscriptions_status_idx').on(table.status)
+  };
+});
+
+// --- Payments & Mobile Money / Gateway Transactions ---
+export const payments = pgTable('payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid('subscription_id').references(() => subscriptions.id, { onDelete: 'set null' }),
+  amountUgx: numeric('amount_ugx', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('UGX'),
+  paymentMethod: text('payment_method').notNull().default('MTN_MOMO'), // 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD' | 'BANK_TRANSFER'
+  provider: text('provider').notNull().default('direct_momo'), // 'direct_momo' | 'flutterwave' | 'paypack' | 'dlocal'
+  providerTransactionId: text('provider_transaction_id'),
+  idempotencyKey: text('idempotency_key').notNull().unique(),
+  status: text('status').notNull().default('pending'), // 'pending' | 'successful' | 'failed' | 'refunded'
+  phoneNumber: text('phone_number'),
+  payerEmail: text('payer_email'),
+  description: text('description').notNull(),
+  rawMetadata: jsonb('raw_metadata'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    orgIdx: index('payments_org_idx').on(table.organizationId),
+    idempotencyIdx: uniqueIndex('payments_idempotency_idx').on(table.idempotencyKey),
+    providerTxIdx: index('payments_provider_tx_idx').on(table.providerTransactionId),
+    statusIdx: index('payments_status_idx').on(table.status)
+  };
+});
+
 // --- Relations ---
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   users: many(users),
@@ -327,7 +381,28 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   lots: many(lots),
   shipments: many(shipments),
   documents: many(documents),
-  auditLogs: many(auditLogs)
+  auditLogs: many(auditLogs),
+  subscriptions: many(subscriptions),
+  payments: many(payments)
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [subscriptions.organizationId],
+    references: [organizations.id]
+  }),
+  payments: many(payments)
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [payments.organizationId],
+    references: [organizations.id]
+  }),
+  subscription: one(subscriptions, {
+    fields: [payments.subscriptionId],
+    references: [subscriptions.id]
+  })
 }));
 
 export const organizationInvitationsRelations = relations(organizationInvitations, ({ one }) => ({
