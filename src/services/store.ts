@@ -1,5 +1,5 @@
 import {
-  Organization, User, Farmer, FarmPlot, Delivery, Lot, Shipment, DocumentRecord, AuditLog, TraceabilityEvent, CsvImportRow, ReadinessScorecard
+  Organization, User, Farmer, FarmPlot, Delivery, Lot, Shipment, DocumentRecord, AuditLog, TraceabilityEvent, CsvImportRow, ReadinessScorecard, UserRole
 } from '../types';
 import {
   INITIAL_ORGANIZATIONS, INITIAL_USERS, INITIAL_FARMERS, INITIAL_FARMS,
@@ -8,8 +8,11 @@ import {
 } from '../data/seedData';
 import { isUgandaCoordinates } from '../data/ugandaRegions';
 import { calculateShipmentReadiness } from './readinessEngine';
+import { api } from './api';
+import { auth, googleAuthProvider } from '../lib/firebase';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 
-const STORAGE_KEY = 'uganda_coffee_traceability_state_v1';
+const STORAGE_KEY = 'uganda_coffee_traceability_cache_v2';
 
 export interface AppState {
   activeOrgId: string;
@@ -24,6 +27,9 @@ export interface AppState {
   documents: DocumentRecord[];
   auditLogs: AuditLog[];
   traceabilityEvents: TraceabilityEvent[];
+  isLoading: boolean;
+  serverConnected: boolean;
+  syncError?: string;
 }
 
 export interface CsvImportPreview {
@@ -33,21 +39,16 @@ export interface CsvImportPreview {
 }
 
 function loadInitialState(): AppState {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.farmers && parsed.shipments) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Could not load stored state, fallback to seed data', e);
-  }
-
   return {
     activeOrgId: 'org-glc-01',
-    currentUser: INITIAL_USERS[0],
+    currentUser: INITIAL_USERS[0] || {
+      id: 'usr-admin-01',
+      name: 'Oryema Joseph',
+      email: 'oryemajoseph3@gmail.com',
+      role: 'admin',
+      organizationId: 'org-glc-01',
+      title: 'Head of Export Operations & Quality Assurance'
+    },
     organizations: INITIAL_ORGANIZATIONS,
     users: INITIAL_USERS,
     farmers: INITIAL_FARMERS,
@@ -57,16 +58,112 @@ function loadInitialState(): AppState {
     shipments: INITIAL_SHIPMENTS,
     documents: INITIAL_DOCUMENTS,
     auditLogs: INITIAL_AUDIT_LOGS,
-    traceabilityEvents: INITIAL_TRACEABILITY_EVENTS
+    traceabilityEvents: INITIAL_TRACEABILITY_EVENTS,
+    isLoading: false,
+    serverConnected: false
   };
 }
 
 class Store {
   private state: AppState;
   private listeners: ((state: AppState) => void)[] = [];
+  private isInitialized = false;
 
   constructor() {
     this.state = loadInitialState();
+    this.initAuthAndSync();
+  }
+
+  private initAuthAndSync() {
+    onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        this.state.isLoading = true;
+        this.notify();
+        await this.syncFromServer();
+      } else {
+        // Still try fetching if server allows dev access or seed data fallback
+        await this.syncFromServer().catch(() => {
+          this.state.isLoading = false;
+          this.notify();
+        });
+      }
+    });
+  }
+
+  public async syncFromServer() {
+    try {
+      this.state.isLoading = true;
+      this.notify();
+
+      // Check profile
+      const profile = await api.getProfile().catch(() => null);
+      if (profile && profile.user) {
+        this.state.currentUser = profile.user;
+        if (profile.organization) {
+          this.state.organizations = [profile.organization];
+          this.state.activeOrgId = profile.organization.id;
+        }
+      }
+
+      // Fetch all server authoritative datasets
+      const [farmers, farms, deliveries, lotsData, shipments, docs, logs] = await Promise.all([
+        api.getFarmers().catch(() => null),
+        api.getFarms().catch(() => null),
+        api.getDeliveries().catch(() => null),
+        api.getLots().catch(() => null),
+        api.getShipments().catch(() => null),
+        api.getDocuments().catch(() => null),
+        api.getAuditLogs().catch(() => null)
+      ]);
+
+      if (farmers !== null) {
+        this.state.farmers = farmers;
+        this.state.serverConnected = true;
+
+        // If organization is brand new & empty, seed baseline pilot data automatically
+        if (farmers.length === 0) {
+          await api.seedBaseline().catch(() => {});
+          // Re-fetch after seed
+          const [seededFarmers, seededFarms, seededDeliveries, seededLotsData, seededShipments, seededDocs, seededLogs] = await Promise.all([
+            api.getFarmers().catch(() => []),
+            api.getFarms().catch(() => []),
+            api.getDeliveries().catch(() => []),
+            api.getLots().catch(() => ({ lots: [], events: [] })),
+            api.getShipments().catch(() => []),
+            api.getDocuments().catch(() => []),
+            api.getAuditLogs().catch(() => [])
+          ]);
+          this.state.farmers = seededFarmers;
+          this.state.farms = seededFarms;
+          this.state.deliveries = seededDeliveries;
+          this.state.lots = seededLotsData.lots || [];
+          this.state.traceabilityEvents = seededLotsData.events || [];
+          this.state.shipments = seededShipments;
+          this.state.documents = seededDocs;
+          this.state.auditLogs = seededLogs;
+        } else {
+          if (farms !== null) this.state.farms = farms;
+          if (deliveries !== null) this.state.deliveries = deliveries;
+          if (lotsData !== null) {
+            this.state.lots = lotsData.lots || [];
+            this.state.traceabilityEvents = lotsData.events || [];
+          }
+          if (shipments !== null) this.state.shipments = shipments;
+          if (docs !== null) this.state.documents = docs;
+          if (logs !== null) this.state.auditLogs = logs;
+        }
+      }
+
+      this.state.isLoading = false;
+      this.state.syncError = undefined;
+      this.recalculateAllShipments();
+      this.notify();
+    } catch (err: any) {
+      console.warn('[Store] Cloud sync note:', err.message);
+      this.state.isLoading = false;
+      this.state.syncError = err.message;
+      this.notify();
+    }
   }
 
   public getState(): AppState {
@@ -81,12 +178,32 @@ class Store {
   }
 
   private notify() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
-    } catch (e) {
-      console.error('Failed to save to localStorage', e);
-    }
     this.listeners.forEach(l => l(this.state));
+  }
+
+  // --- Authentication Actions ---
+  public async loginWithGoogle() {
+    try {
+      this.state.isLoading = true;
+      this.notify();
+      await signInWithPopup(auth, googleAuthProvider);
+      await this.syncFromServer();
+    } catch (err: any) {
+      console.error('[Auth] Google sign in failed:', err);
+      this.state.isLoading = false;
+      this.state.syncError = err.message;
+      this.notify();
+    }
+  }
+
+  public async logout() {
+    try {
+      await signOut(auth);
+      this.state.currentUser = INITIAL_USERS[0]!;
+      this.notify();
+    } catch (err) {
+      console.error('[Auth] Logout failed:', err);
+    }
   }
 
   public logAudit(action: string, entity: string, entityId: string, previousValue?: string, newValue?: string) {
@@ -103,6 +220,7 @@ class Store {
       newValue
     };
     this.state.auditLogs = [log, ...this.state.auditLogs];
+    this.notify();
   }
 
   // --- Auth & Org ---
@@ -115,7 +233,7 @@ class Store {
     this.setActiveOrganization(orgId);
   }
 
-  public setCurrentUserRole(role: User['role']) {
+  public setCurrentUserRole(role: UserRole) {
     this.state.currentUser = {
       ...this.state.currentUser,
       role
@@ -123,198 +241,229 @@ class Store {
     this.notify();
   }
 
-  public switchUserRole(role: User['role']) {
+  public switchUserRole(role: UserRole) {
     this.setCurrentUserRole(role);
   }
 
-  public updateOrganization(org: Organization) {
+  public async updateOrganization(org: Organization) {
     this.state.organizations = this.state.organizations.map(o => o.id === org.id ? org : o);
-    this.logAudit('Organization Profile Updated', 'Organization', org.id, undefined, org.legalName);
     this.notify();
+    try {
+      await api.updateOrganization({
+        legalName: org.legalName,
+        district: org.district,
+        address: org.address,
+        contactPhone: org.contactPhone,
+        contactEmail: org.contactEmail,
+        website: org.website,
+        subscriptionPlan: org.subscriptionPlan
+      });
+      await this.syncFromServer();
+    } catch (err) {
+      console.error('[Store] Org update API error:', err);
+    }
   }
 
-
   // --- Farmers ---
-  public addFarmer(farmer: Omit<Farmer, 'id' | 'organizationId' | 'createdDate' | 'updatedDate'>): Farmer {
+  public async addFarmer(farmer: Omit<Farmer, 'id' | 'organizationId' | 'createdDate' | 'updatedDate'>): Promise<Farmer> {
+    const tempId = `UG-F-${Math.floor(1000 + Math.random() * 9000)}`;
     const newFarmer: Farmer = {
       ...farmer,
-      id: `UG-F-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: tempId,
       organizationId: this.state.activeOrgId,
       createdDate: new Date().toISOString().split('T')[0],
       updatedDate: new Date().toISOString().split('T')[0]
     };
     this.state.farmers = [newFarmer, ...this.state.farmers];
-    this.logAudit('Farmer Created', 'Farmer', newFarmer.id, undefined, `${newFarmer.fullName} (${newFarmer.district})`);
     this.notify();
-    return newFarmer;
+
+    try {
+      const created = await api.createFarmer(farmer);
+      this.state.farmers = this.state.farmers.map(f => f.id === tempId ? { ...newFarmer, id: created.id } : f);
+      await this.syncFromServer();
+      return created;
+    } catch (err) {
+      console.error('[Store] addFarmer API error:', err);
+      return newFarmer;
+    }
   }
 
-  public updateFarmer(farmer: Farmer) {
-    const old = this.state.farmers.find(f => f.id === farmer.id);
+  public async updateFarmer(farmer: Farmer) {
     this.state.farmers = this.state.farmers.map(f => f.id === farmer.id ? { ...farmer, updatedDate: new Date().toISOString().split('T')[0] } : f);
-    this.logAudit('Farmer Updated', 'Farmer', farmer.id, old?.fullName, farmer.fullName);
     this.recalculateAllShipments();
     this.notify();
+
+    try {
+      await api.updateFarmer(farmer.id, farmer);
+      await this.syncFromServer();
+    } catch (err) {
+      console.error('[Store] updateFarmer API error:', err);
+    }
   }
 
-  public deleteFarmer(id: string) {
-    const old = this.state.farmers.find(f => f.id === id);
+  public async deleteFarmer(id: string) {
     this.state.farmers = this.state.farmers.filter(f => f.id !== id);
-    this.logAudit('Farmer Deleted', 'Farmer', id, old?.fullName, 'Deleted');
     this.recalculateAllShipments();
     this.notify();
+
+    try {
+      await api.deleteFarmer(id);
+      await this.syncFromServer();
+    } catch (err) {
+      console.error('[Store] deleteFarmer API error:', err);
+    }
   }
 
   // --- Farms / Plots ---
-  public addFarm(farm: Omit<FarmPlot, 'id' | 'organizationId'>): FarmPlot {
+  public async addFarm(farm: Omit<FarmPlot, 'id' | 'organizationId'>): Promise<FarmPlot> {
+    const tempId = `UG-PL-${Math.floor(2000 + Math.random() * 8000)}`;
     const newFarm: FarmPlot = {
       ...farm,
-      id: `UG-PL-${Math.floor(2000 + Math.random() * 8000)}`,
+      id: tempId,
       organizationId: this.state.activeOrgId
     };
     this.state.farms = [newFarm, ...this.state.farms];
-    this.logAudit('Farm Plot Created', 'FarmPlot', newFarm.id, undefined, `${newFarm.farmName} (${newFarm.district})`);
     this.recalculateAllShipments();
     this.notify();
-    return newFarm;
+
+    try {
+      const created = await api.createFarm(farm);
+      this.state.farms = this.state.farms.map(f => f.id === tempId ? { ...newFarm, id: created.id } : f);
+      await this.syncFromServer();
+      return created;
+    } catch (err) {
+      console.error('[Store] addFarm API error:', err);
+      return newFarm;
+    }
   }
 
-  public updateFarm(farm: FarmPlot) {
-    const old = this.state.farms.find(f => f.id === farm.id);
+  public async updateFarm(farm: FarmPlot) {
     this.state.farms = this.state.farms.map(f => f.id === farm.id ? farm : f);
-    this.logAudit(
-      'Farm Plot Updated',
-      'FarmPlot',
-      farm.id,
-      old ? `Lat: ${old.latitude}, Lng: ${old.longitude}` : undefined,
-      `Lat: ${farm.latitude}, Lng: ${farm.longitude} (${farm.geometryType})`
-    );
     this.recalculateAllShipments();
     this.notify();
-  }
 
-  public deleteFarm(id: string) {
-    const old = this.state.farms.find(f => f.id === id);
-    this.state.farms = this.state.farms.filter(f => f.id !== id);
-    this.logAudit('Farm Deleted', 'FarmPlot', id, old?.farmName, 'Deleted');
-    this.recalculateAllShipments();
-    this.notify();
+    try {
+      await api.updateFarm(farm.id, farm);
+      await this.syncFromServer();
+    } catch (err) {
+      console.error('[Store] updateFarm API error:', err);
+    }
   }
 
   // --- Deliveries ---
-  public addDelivery(delivery: Omit<Delivery, 'id' | 'organizationId'>): Delivery {
+  public async addDelivery(delivery: Omit<Delivery, 'id' | 'organizationId'>): Promise<Delivery> {
+    const tempId = `DEL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newDelivery: Delivery = {
       ...delivery,
-      id: `DEL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: tempId,
       organizationId: this.state.activeOrgId
     };
     this.state.deliveries = [newDelivery, ...this.state.deliveries];
-    this.logAudit('Delivery Recorded', 'Delivery', newDelivery.id, undefined, `${newDelivery.quantityKg} kg ${newDelivery.coffeeType} (${newDelivery.receiptNumber})`);
     this.recalculateAllShipments();
     this.notify();
-    return newDelivery;
+
+    try {
+      const created = await api.createDelivery(delivery);
+      this.state.deliveries = this.state.deliveries.map(d => d.id === tempId ? { ...newDelivery, id: created.id } : d);
+      await this.syncFromServer();
+      return created;
+    } catch (err) {
+      console.error('[Store] addDelivery API error:', err);
+      return newDelivery;
+    }
   }
 
-  public updateDelivery(delivery: Delivery) {
+  public async updateDelivery(delivery: Delivery) {
     this.state.deliveries = this.state.deliveries.map(d => d.id === delivery.id ? delivery : d);
-    this.logAudit('Delivery Updated', 'Delivery', delivery.id, undefined, `${delivery.quantityKg} kg`);
     this.recalculateAllShipments();
     this.notify();
   }
 
   // --- Lots & Traceability ---
-  public addLot(lot: Omit<Lot, 'id' | 'organizationId' | 'creationDate'>): Lot {
+  public async addLot(lot: Omit<Lot, 'id' | 'organizationId' | 'creationDate'> & { deliveryIds?: string[] }): Promise<Lot> {
+    const tempId = `LOT-UG-${lot.coffeeType === 'Robusta' ? 'RB' : 'AR'}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newLot: Lot = {
       ...lot,
-      id: `LOT-UG-${lot.coffeeType === 'Robusta' ? 'RB' : 'AR'}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: tempId,
       organizationId: this.state.activeOrgId,
       creationDate: new Date().toISOString().split('T')[0]
     };
     this.state.lots = [newLot, ...this.state.lots];
-    
-    // Add default initial intake event
-    const initialEvent: TraceabilityEvent = {
-      id: `EVT-${Date.now().toString().slice(-5)}`,
-      lotId: newLot.id,
-      eventType: 'Received at Collection Hub',
-      location: newLot.currentLocation,
-      dateTime: new Date().toISOString(),
-      responsibleParty: this.state.currentUser.name,
-      quantityKg: newLot.quantityKg,
-      referenceDocNumber: newLot.lotNumber,
-      notes: 'Initial lot formation and weight verification.'
-    };
-    this.state.traceabilityEvents = [initialEvent, ...this.state.traceabilityEvents];
-
-    this.logAudit('Lot Created', 'Lot', newLot.id, undefined, `${newLot.lotNumber} (${newLot.quantityKg} kg)`);
     this.recalculateAllShipments();
     this.notify();
-    return newLot;
+
+    try {
+      const created = await api.createLot({
+        lotNumber: lot.lotNumber,
+        coffeeType: lot.coffeeType,
+        grade: lot.grade,
+        quantityKg: lot.quantityKg,
+        currentLocation: lot.currentLocation,
+        processingStation: lot.processingStation,
+        deliveryIds: lot.sourceDeliveryIds || lot.deliveryIds || [],
+        notes: lot.notes
+      });
+      await this.syncFromServer();
+      return created;
+    } catch (err) {
+      console.error('[Store] addLot API error:', err);
+      return newLot;
+    }
   }
 
-  public updateLot(lot: Lot) {
-    const old = this.state.lots.find(l => l.id === lot.id);
-    this.state.lots = this.state.lots.map(l => l.id === lot.id ? lot : l);
-    this.logAudit('Lot Updated', 'Lot', lot.id, old?.currentStatus, lot.currentStatus);
-    this.recalculateAllShipments();
-    this.notify();
-  }
-
-  public addTraceabilityEvent(event: Omit<TraceabilityEvent, 'id'>): TraceabilityEvent {
+  public async addTraceabilityEvent(event: Omit<TraceabilityEvent, 'id'>): Promise<TraceabilityEvent> {
+    const tempId = `EVT-${Date.now().toString().slice(-6)}`;
     const newEvent: TraceabilityEvent = {
       ...event,
-      id: `EVT-${Date.now().toString().slice(-6)}`
+      id: tempId
     };
     this.state.traceabilityEvents = [newEvent, ...this.state.traceabilityEvents];
-    this.logAudit('Traceability Movement Added', 'TraceabilityEvent', newEvent.lotId, undefined, `${newEvent.eventType} at ${newEvent.location}`);
     this.recalculateAllShipments();
     this.notify();
-    return newEvent;
+
+    try {
+      const created = await api.addLotEvent(event.lotId, event);
+      await this.syncFromServer();
+      return created;
+    } catch (err) {
+      console.error('[Store] addTraceabilityEvent API error:', err);
+      return newEvent;
+    }
   }
 
   // --- Shipments ---
-  public addShipment(shipment: Omit<Shipment, 'id' | 'organizationId' | 'createdDate' | 'readinessStatus'>): Shipment {
-    const id = `SH-UG-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+  public async addShipment(shipment: Omit<Shipment, 'id' | 'organizationId' | 'createdDate' | 'readinessStatus'>): Promise<Shipment> {
+    const tempId = `SH-UG-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
     const newShipment: Shipment = {
       ...shipment,
-      id,
+      id: tempId,
       organizationId: this.state.activeOrgId,
       createdDate: new Date().toISOString().split('T')[0],
       readinessStatus: 'YELLOW'
     };
 
-    // Calculate initial readiness
-    const scorecard = calculateShipmentReadiness(
-      newShipment,
-      this.state.lots,
-      this.state.farms,
-      this.state.farmers,
-      this.state.deliveries,
-      this.state.documents,
-      this.state.traceabilityEvents
-    );
-    newShipment.readinessStatus = scorecard.overallStatus;
-
     this.state.shipments = [newShipment, ...this.state.shipments];
-    this.logAudit('Shipment Created', 'Shipment', newShipment.id, undefined, `${newShipment.exportReference} -> ${newShipment.buyerName}`);
+    this.recalculateAllShipments();
     this.notify();
-    return newShipment;
-  }
 
-  public updateShipment(shipment: Shipment) {
-    const scorecard = calculateShipmentReadiness(
-      shipment,
-      this.state.lots,
-      this.state.farms,
-      this.state.farmers,
-      this.state.deliveries,
-      this.state.documents,
-      this.state.traceabilityEvents
-    );
-    const updated = { ...shipment, readinessStatus: scorecard.overallStatus };
-    this.state.shipments = this.state.shipments.map(s => s.id === shipment.id ? updated : s);
-    this.logAudit('Shipment Updated', 'Shipment', shipment.id, undefined, `Status: ${updated.exportStatus}, Readiness: ${updated.readinessStatus}`);
-    this.notify();
+    try {
+      const created = await api.createShipment({
+        exportReference: shipment.exportReference,
+        shipmentDate: shipment.shipmentDate,
+        buyerName: shipment.buyerName,
+        destinationCountry: shipment.destinationCountry,
+        destinationPort: shipment.destinationPort,
+        coffeeType: shipment.coffeeType,
+        totalQuantityKg: shipment.totalQuantityKg,
+        lotIds: shipment.linkedLotIds,
+        notes: shipment.notes
+      });
+      await this.syncFromServer();
+      return created;
+    } catch (err) {
+      console.error('[Store] addShipment API error:', err);
+      return newShipment;
+    }
   }
 
   public recalculateAllShipments() {
@@ -347,63 +496,69 @@ class Store {
   }
 
   // --- Documents ---
-  public addDocument(doc: Omit<DocumentRecord, 'id' | 'organizationId' | 'uploadDate' | 'uploadedBy'>): DocumentRecord {
+  public async addDocument(doc: Omit<DocumentRecord, 'id' | 'organizationId' | 'uploadDate' | 'uploadedBy'>): Promise<DocumentRecord> {
+    const tempId = `DOC-${Math.floor(100 + Math.random() * 900)}`;
     const newDoc: DocumentRecord = {
       ...doc,
-      id: `DOC-${Math.floor(100 + Math.random() * 900)}`,
+      id: tempId,
       organizationId: this.state.activeOrgId,
       uploadDate: new Date().toISOString().split('T')[0],
       uploadedBy: this.state.currentUser.name
     };
     this.state.documents = [newDoc, ...this.state.documents];
-    this.logAudit('Document Uploaded', 'DocumentRecord', newDoc.id, undefined, `${newDoc.fileName} (${newDoc.type})`);
     this.recalculateAllShipments();
     this.notify();
     return newDoc;
   }
 
-  public verifyDocument(id: string) {
-    this.state.documents = this.state.documents.map(d => d.id === id ? { ...d, verificationStatus: 'Verified' } : d);
-    this.logAudit('Document Verified', 'DocumentRecord', id, 'Pending Review', 'Verified');
-    this.recalculateAllShipments();
-    this.notify();
+  public async uploadDocumentFile(file: File, meta: { type: string; relatedEntityType: string; relatedEntityId: string; notes?: string }): Promise<DocumentRecord> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', meta.type);
+    formData.append('relatedEntityType', meta.relatedEntityType);
+    formData.append('relatedEntityId', meta.relatedEntityId);
+    if (meta.notes) formData.append('notes', meta.notes);
+
+    const uploaded = await api.uploadDocument(formData);
+    await this.syncFromServer();
+    return uploaded;
   }
 
-  public updateDocument(doc: DocumentRecord) {
+  public async updateDocument(doc: DocumentRecord) {
     this.state.documents = this.state.documents.map(d => d.id === doc.id ? doc : d);
-    this.logAudit('Document Updated', 'DocumentRecord', doc.id, undefined, `${doc.fileName} (${doc.verificationStatus})`);
     this.recalculateAllShipments();
     this.notify();
+
+    try {
+      await api.updateDocument(doc.id, doc);
+      await this.syncFromServer();
+    } catch (err) {
+      console.error('[Store] updateDocument API error:', err);
+    }
   }
 
-  public deleteDocument(id: string) {
-    const old = this.state.documents.find(d => d.id === id);
-    this.state.documents = this.state.documents.filter(d => d.id !== id);
-    this.logAudit('Document Deleted', 'DocumentRecord', id, old?.fileName, 'Deleted');
+  public async verifyDocument(id: string) {
+    this.state.documents = this.state.documents.map(d => d.id === id ? { ...d, verificationStatus: 'Verified' } : d);
     this.recalculateAllShipments();
     this.notify();
+
+    try {
+      await api.updateDocument(id, { verificationStatus: 'Verified' });
+      await this.syncFromServer();
+    } catch (err) {
+      console.error('[Store] verifyDocument API error:', err);
+    }
   }
 
-  // --- Bulk CSV Import Processor ---
-  public importBulkFarmersAndFarms(validRows: any[]) {
-    return this.commitImportedRows(validRows);
-  }
-
-  public resetToSeedData() {
-    this.resetToSeed();
-  }
-
-
-  // --- Bulk CSV Import Processor ---
+  // --- CSV Import ---
   public parseAndValidateCsv(csvText: string): CsvImportPreview & { rows: CsvImportRow[]; validCount: number; warningCount: number; errorCount: number } {
     const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
     if (lines.length <= 1) {
       return { rows: [], validRows: [], invalidRows: [], errors: [], validCount: 0, warningCount: 0, errorCount: 0 };
     }
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[\s_-]/g, ''));
+    const headers = lines[0]!.split(',').map(h => h.trim().toLowerCase().replace(/[\s_-]/g, ''));
     
-    // Check key column indices
     const nameIdx = headers.findIndex(h => h.includes('name'));
     const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('contact') || h.includes('tel'));
     const villageIdx = headers.findIndex(h => h.includes('village'));
@@ -420,26 +575,24 @@ class Store {
     let warningCount = 0;
     let errorCount = 0;
 
-    const existingIds = new Set(this.state.farmers.map(f => f.id));
-
     for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i].split(',').map(p => p.trim());
+      const parts = lines[i]!.split(',').map(p => p.trim());
       if (parts.length < 2) continue;
 
       const errors: string[] = [];
       const warnings: string[] = [];
 
-      const fullName = nameIdx >= 0 ? parts[nameIdx] : parts[0] || '';
-      const phone = phoneIdx >= 0 ? parts[phoneIdx] : '';
-      const village = villageIdx >= 0 ? parts[villageIdx] : '';
-      const parish = parishIdx >= 0 ? parts[parishIdx] : '';
-      const subcounty = subcountyIdx >= 0 ? parts[subcountyIdx] : '';
-      const district = districtIdx >= 0 ? parts[districtIdx] : '';
-      const cooperative = coopIdx >= 0 ? parts[coopIdx] : 'Great Lakes Smallholder Farmers Network';
+      const fullName = nameIdx >= 0 ? parts[nameIdx]! : parts[0] || '';
+      const phone = phoneIdx >= 0 ? parts[phoneIdx]! : '';
+      const village = villageIdx >= 0 ? parts[villageIdx]! : '';
+      const parish = parishIdx >= 0 ? parts[parishIdx]! : '';
+      const subcounty = subcountyIdx >= 0 ? parts[subcountyIdx]! : '';
+      const district = districtIdx >= 0 ? parts[districtIdx]! : '';
+      const cooperative = coopIdx >= 0 ? parts[coopIdx]! : 'Great Lakes Smallholder Farmers Network';
       
-      const rawLat = latIdx >= 0 ? parseFloat(parts[latIdx]) : NaN;
-      const rawLng = lngIdx >= 0 ? parseFloat(parts[lngIdx]) : NaN;
-      const rawArea = areaIdx >= 0 ? parseFloat(parts[areaIdx]) : NaN;
+      const rawLat = latIdx >= 0 ? parseFloat(parts[latIdx]!) : NaN;
+      const rawLng = lngIdx >= 0 ? parseFloat(parts[lngIdx]!) : NaN;
+      const rawArea = areaIdx >= 0 ? parseFloat(parts[areaIdx]!) : NaN;
 
       const latitude = isNaN(rawLat) ? null : rawLat;
       const longitude = isNaN(rawLng) ? null : rawLng;
@@ -459,11 +612,10 @@ class Store {
           errors.push(`Coordinates (${latitude}, ${longitude}) fall outside Uganda bounding box (-1.5° to 4.3° N, 29.5° to 35.1° E)`);
         }
       } else {
-        warnings.push('Missing GPS latitude/longitude (Point will need mapping later)');
+        warnings.push('Missing GPS latitude/longitude');
       }
 
       const generatedId = `UG-F-${Math.floor(2000 + Math.random() * 7000)}`;
-
       const isValid = errors.length === 0;
       if (isValid) {
         validCount++;
@@ -497,17 +649,21 @@ class Store {
 
     return { 
       rows, 
-      validRows,
-      invalidRows,
-      errors: allErrors,
+      validRows, 
+      invalidRows, 
+      errors: allErrors, 
       validCount, 
       warningCount, 
       errorCount 
     };
   }
 
+  public async importBulkFarmersAndFarms(validRows: any[]) {
+    // Send raw CSV or commit rows via API
+    return this.commitImportedRows(validRows);
+  }
 
-  public commitImportedRows(validRows: CsvImportRow[]): number {
+  public async commitImportedRows(validRows: CsvImportRow[]): Promise<number> {
     let count = 0;
     for (const r of validRows) {
       if (!r.isValid) continue;
@@ -531,7 +687,6 @@ class Store {
 
       this.state.farmers = [farmer, ...this.state.farmers];
 
-      // Auto-create farm plot if GPS coordinates exist
       if (r.latitude && r.longitude) {
         const farm: FarmPlot = {
           id: `UG-PL-${Math.floor(3000 + Math.random() * 6000)}`,
@@ -559,13 +714,12 @@ class Store {
       count++;
     }
 
-    this.logAudit('Bulk CSV Farmers Imported', 'Farmer', `BATCH-${Date.now()}`, undefined, `Imported ${count} verified records`);
     this.recalculateAllShipments();
     this.notify();
     return count;
   }
 
-  // --- GeoJSON Generator for Shipment Export ---
+  // --- GeoJSON Generator ---
   public generateShipmentGeoJson(shipmentId: string): object {
     const shipment = this.state.shipments.find(s => s.id === shipmentId);
     if (!shipment) return {};
@@ -626,22 +780,13 @@ class Store {
   }
 
   public resetToSeed() {
-    localStorage.removeItem(STORAGE_KEY);
-    this.state = {
-      activeOrgId: 'org-glc-01',
-      currentUser: INITIAL_USERS[0],
-      organizations: INITIAL_ORGANIZATIONS,
-      users: INITIAL_USERS,
-      farmers: INITIAL_FARMERS,
-      farms: INITIAL_FARMS,
-      deliveries: INITIAL_DELIVERIES,
-      lots: INITIAL_LOTS,
-      shipments: INITIAL_SHIPMENTS,
-      documents: INITIAL_DOCUMENTS,
-      auditLogs: INITIAL_AUDIT_LOGS,
-      traceabilityEvents: INITIAL_TRACEABILITY_EVENTS
-    };
+    this.state = loadInitialState();
+    this.syncFromServer();
     this.notify();
+  }
+
+  public resetToSeedData() {
+    this.resetToSeed();
   }
 }
 

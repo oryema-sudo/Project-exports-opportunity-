@@ -32,6 +32,8 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
   // Upload Form State
   const [docType, setDocType] = useState<DocumentType>('Farmer Consent / Due-Diligence Agreement');
   const [fileName, setFileName] = useState<string>('Farmer_Consent_Form_Masaka_2026.pdf');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [entityType, setEntityType] = useState<'Farmer' | 'Farm' | 'Delivery' | 'Lot' | 'Shipment'>('Farmer');
   const [entityId, setEntityId] = useState<string>('FARMER-UG-001');
   const [notes, setNotes] = useState<string>('Verified and signed by producer and local council LC1 representative.');
@@ -51,20 +53,36 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
     return true;
   });
 
-  const handleUploadDoc = (e: React.FormEvent) => {
+  const handleUploadDoc = async (e: React.FormEvent) => {
     e.preventDefault();
-    appStore.addDocument({
-      type: docType,
-      fileName,
-      fileSize: '1.8 MB',
-      fileUrl: '#verified-attachment',
-      relatedEntityType: entityType,
-      relatedEntityId: entityId,
-      verificationStatus: 'Verified',
-      notes
-    });
-
-    setShowUploadModal(false);
+    setIsUploading(true);
+    try {
+      if (selectedFile) {
+        await appStore.uploadDocumentFile(selectedFile, {
+          type: docType,
+          relatedEntityType: entityType,
+          relatedEntityId: entityId,
+          notes
+        });
+      } else {
+        await appStore.addDocument({
+          type: docType,
+          fileName,
+          fileSize: '1.8 MB',
+          fileUrl: '#verified-attachment',
+          relatedEntityType: entityType,
+          relatedEntityId: entityId,
+          verificationStatus: 'Verified',
+          notes
+        });
+      }
+      setShowUploadModal(false);
+      setSelectedFile(null);
+    } catch (err: any) {
+      alert(`Upload failed: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleToggleVerify = (doc: DocumentRecord) => {
@@ -227,7 +245,21 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-stone-700 font-semibold mb-1">File Name</label>
+                <label className="block text-stone-700 font-semibold mb-1">Select File (PDF, Images, CSV, GeoJSON)</label>
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setSelectedFile(e.target.files[0]);
+                      setFileName(e.target.files[0].name);
+                    }
+                  }}
+                  className="w-full text-xs text-stone-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-stone-700 font-semibold mb-1">Document Display Title / File Name</label>
                 <input
                   type="text"
                   required

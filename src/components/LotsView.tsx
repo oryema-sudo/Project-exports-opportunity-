@@ -69,7 +69,7 @@ export const LotsView: React.FC<LotsViewProps> = ({
 
   const availableDeliveries = deliveries.filter(d => !d.associatedLotId || d.associatedLotId === selectedLot?.id);
 
-  const handleCreateLot = (e: React.FormEvent) => {
+  const handleCreateLot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedDeliveryIds.length === 0) {
       alert('Please select at least one source purchase/delivery record.');
@@ -81,7 +81,7 @@ export const LotsView: React.FC<LotsViewProps> = ({
     const sourceFarmerIds: string[] = Array.from(new Set(selectedDelvs.map(d => d.farmerId)));
     const sourceFarmIds: string[] = Array.from(new Set(selectedDelvs.map(d => d.farmId)));
 
-    const newLot = appStore.addLot({
+    const newLot = await appStore.addLot({
       lotNumber,
       coffeeType,
       grade,

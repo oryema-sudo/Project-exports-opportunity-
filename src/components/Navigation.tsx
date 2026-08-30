@@ -17,7 +17,7 @@ import {
   AlertTriangle,
   FileSpreadsheet
 } from 'lucide-react';
-import { AppState } from '../services/store';
+import { AppState, appStore } from '../services/store';
 import { UserRole } from '../types';
 
 export type ActiveTab = 
@@ -158,6 +158,38 @@ export const Navigation: React.FC<NavigationProps> = ({
                   <span className="hidden sm:inline">New Consignment</span>
                 </button>
               </div>
+            )}
+
+            {/* Cloud Database & Auth Status */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-stone-800/90 border border-stone-700 text-xs">
+              <div className={`w-2 h-2 rounded-full ${state.serverConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className="text-[11px] text-stone-300 font-mono">
+                {state.serverConnected ? 'PostgreSQL Active' : 'Connecting DB...'}
+              </span>
+            </div>
+
+            {/* Google Sign In / User Profile */}
+            {state.currentUser.email.includes('@') ? (
+              <div className="flex items-center gap-2">
+                <div className="hidden lg:block text-right">
+                  <div className="text-xs font-semibold text-stone-200 leading-tight">{state.currentUser.name}</div>
+                  <div className="text-[10px] text-stone-400 font-mono truncate max-w-[120px]">{state.currentUser.email}</div>
+                </div>
+                <button
+                  onClick={() => appStore.loginWithGoogle()}
+                  className="px-2 py-1 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white rounded border border-stone-700 text-xs font-medium transition-colors"
+                  title="Switch Account / Sign In with Google"
+                >
+                  Account
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => appStore.loginWithGoogle()}
+                className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+              >
+                Sign In
+              </button>
             )}
 
             {/* Role Switcher Pill (for testing Admin vs Staff vs Viewer permissions) */}

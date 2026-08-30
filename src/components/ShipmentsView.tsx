@@ -58,7 +58,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
 
   const availableLots = lots.filter(l => l.currentStatus !== 'Shipped' && l.currentStatus !== 'Closed');
 
-  const handleCreateShipment = (e: React.FormEvent) => {
+  const handleCreateShipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedLotIds.length === 0) {
       alert('Please select at least one coffee lot to include in this export consignment.');
@@ -70,7 +70,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
       .filter(l => selectedLotIds.includes(l.id))
       .reduce((sum, l) => sum + l.quantityKg, 0);
 
-    const newShipment = appStore.addShipment({
+    const newShipment = await appStore.addShipment({
       exportReference,
       shipmentDate,
       buyerName: buyer.name,
