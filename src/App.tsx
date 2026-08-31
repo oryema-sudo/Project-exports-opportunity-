@@ -18,10 +18,52 @@ import { OrganizationModal } from './components/OrganizationModal';
 import { ShieldCheck, Info } from 'lucide-react';
 
 export default function App() {
+  const getInitialTab = (): ActiveTab => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(tabParam)) {
+        return tabParam as ActiveTab;
+      }
+      const hash = window.location.hash.replace('#', '');
+      if (hash && ['dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(hash)) {
+        return hash as ActiveTab;
+      }
+    } catch {
+      // ignore
+    }
+    return 'dashboard';
+  };
+
   const [state, setState] = useState<AppState>(appStore.getState());
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [activeTab, setActiveTabState] = useState<ActiveTab>(getInitialTab);
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const setActiveTab = (tab: ActiveTab) => {
+    setActiveTabState(tab);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    } catch {
+      // ignore
+    }
+  };
+
+  // Sync tab on popstate / hash change
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const tab = getInitialTab();
+      setActiveTabState(tab);
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
 
   // Modals
   const [showBulkImport, setShowBulkImport] = useState<boolean>(false);

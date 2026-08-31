@@ -38,19 +38,21 @@ export interface CsvImportPreview {
   errors: string[];
 }
 
+const GUEST_USER: User = {
+  id: '',
+  name: 'Guest User',
+  email: '',
+  role: 'viewer',
+  organizationId: '',
+  title: 'Guest Viewer',
+  isPlatformOwner: false,
+  platformRole: null
+};
+
 function loadInitialState(): AppState {
   return {
     activeOrgId: 'org-glc-01',
-    currentUser: INITIAL_USERS[0] || {
-      id: 'usr-001',
-      name: 'Mbabazi Grace',
-      email: 'g.mbabazi@greatlakescoffee.ug',
-      role: 'admin',
-      organizationId: 'org-glc-01',
-      title: 'Head of Quality & Export Compliance',
-      isPlatformOwner: false,
-      platformRole: null
-    },
+    currentUser: GUEST_USER,
     organizations: INITIAL_ORGANIZATIONS,
     users: INITIAL_USERS,
     farmers: INITIAL_FARMERS,
@@ -83,11 +85,9 @@ class Store {
         this.notify();
         await this.syncFromServer();
       } else {
-        // Still try fetching if server allows dev access or seed data fallback
-        await this.syncFromServer().catch(() => {
-          this.state.isLoading = false;
-          this.notify();
-        });
+        this.state.currentUser = GUEST_USER;
+        this.state.isLoading = false;
+        this.notify();
       }
     });
   }
@@ -217,11 +217,17 @@ class Store {
 
   public async logout() {
     try {
+      this.state.isLoading = true;
+      this.notify();
       await signOut(auth);
-      this.state.currentUser = INITIAL_USERS[0]!;
+      this.state.currentUser = GUEST_USER;
+      this.state.isLoading = false;
       this.notify();
     } catch (err) {
       console.error('[Auth] Logout failed:', err);
+      this.state.currentUser = GUEST_USER;
+      this.state.isLoading = false;
+      this.notify();
     }
   }
 

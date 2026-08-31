@@ -189,11 +189,11 @@ export const Navigation: React.FC<NavigationProps> = ({
 
             {/* Google Sign In / User Profile Dropdown */}
             <div className="relative" ref={accountMenuRef}>
-              {state.currentUser.email.includes('@') ? (
+              {state.currentUser && state.currentUser.email && state.currentUser.email.includes('@') ? (
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setShowAccountMenu(!showAccountMenu)}
-                    className="flex items-center gap-2 px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded border border-stone-700 text-xs font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="flex items-center gap-2 px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded border border-stone-700 text-xs font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
                     title="View Account Details & Security"
                   >
                     <div className="w-5 h-5 rounded-full bg-emerald-700 flex items-center justify-center text-[10px] font-bold text-white uppercase">
@@ -225,22 +225,25 @@ export const Navigation: React.FC<NavigationProps> = ({
 
                       <div className="py-1">
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             setShowAccountMenu(false);
-                            appStore.loginWithGoogle();
+                            await appStore.loginWithGoogle();
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:text-white hover:bg-stone-800 flex items-center gap-2 transition-colors"
+                          className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:text-white hover:bg-stone-800 flex items-center gap-2 transition-colors cursor-pointer"
                         >
                           <LogIn className="w-3.5 h-3.5 text-emerald-400" />
                           <span>Switch Google Account</span>
                         </button>
 
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             setShowAccountMenu(false);
-                            appStore.logout();
+                            await appStore.logout();
+                            if (activeTab === 'owner') {
+                              setActiveTab('dashboard');
+                            }
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-red-300 hover:text-red-200 hover:bg-red-950/40 flex items-center gap-2 transition-colors"
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-300 hover:text-red-200 hover:bg-red-950/40 flex items-center gap-2 transition-colors cursor-pointer"
                         >
                           <LogOut className="w-3.5 h-3.5 text-red-400" />
                           <span>Sign Out</span>
@@ -252,7 +255,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               ) : (
                 <button
                   onClick={() => appStore.loginWithGoogle()}
-                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   <span>Sign In</span>
