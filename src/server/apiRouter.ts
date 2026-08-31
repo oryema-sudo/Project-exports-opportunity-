@@ -24,8 +24,12 @@ import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
 import { UserRole } from '../types.ts';
+import { ownerRouter } from './ownerRouter.ts';
 
 export const apiRouter = Router();
+
+// Platform Owner & CEO Governance Subsystem (Strictly protected by requirePlatformOwner)
+apiRouter.use('/owner', ownerRouter);
 
 // Helper for immutable audit logging
 async function logServerAudit(

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Building2, 
   MapPin, 
@@ -15,7 +15,12 @@ import {
   Scale,
   Compass,
   AlertTriangle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Crown,
+  LogOut,
+  User as UserIcon,
+  ChevronDown,
+  LogIn
 } from 'lucide-react';
 import { AppState, appStore } from '../services/store';
 import { UserRole } from '../types';
@@ -28,7 +33,8 @@ export type ActiveTab =
   | 'farmers' 
   | 'map' 
   | 'documents' 
-  | 'audit';
+  | 'audit'
+  | 'owner';
 
 interface NavigationProps {
   state: AppState;
@@ -62,6 +68,19 @@ export const Navigation: React.FC<NavigationProps> = ({
   onResetData
 }) => {
   const activeOrg = state.organizations.find(o => o.id === state.activeOrgId) || state.organizations[0];
+  const [showAccountMenu, setShowAccountMenu] = useState<boolean>(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close account menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setShowAccountMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Count active warnings and blockers
   const blockedShipments = state.shipments.filter(s => s.readinessStatus === 'RED').length;
@@ -168,29 +187,78 @@ export const Navigation: React.FC<NavigationProps> = ({
               </span>
             </div>
 
-            {/* Google Sign In / User Profile */}
-            {state.currentUser.email.includes('@') ? (
-              <div className="flex items-center gap-2">
-                <div className="hidden lg:block text-right">
-                  <div className="text-xs font-semibold text-stone-200 leading-tight">{state.currentUser.name}</div>
-                  <div className="text-[10px] text-stone-400 font-mono truncate max-w-[120px]">{state.currentUser.email}</div>
+            {/* Google Sign In / User Profile Dropdown */}
+            <div className="relative" ref={accountMenuRef}>
+              {state.currentUser.email.includes('@') ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setShowAccountMenu(!showAccountMenu)}
+                    className="flex items-center gap-2 px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded border border-stone-700 text-xs font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    title="View Account Details & Security"
+                  >
+                    <div className="w-5 h-5 rounded-full bg-emerald-700 flex items-center justify-center text-[10px] font-bold text-white uppercase">
+                      {state.currentUser.name ? state.currentUser.name.charAt(0) : 'U'}
+                    </div>
+                    <div className="hidden lg:block text-left leading-tight">
+                      <div className="text-xs font-semibold text-stone-200">{state.currentUser.name}</div>
+                    </div>
+                    <ChevronDown className="w-3 h-3 text-stone-400" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showAccountMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-72 bg-stone-900 border border-stone-700 rounded-lg shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="px-3 py-2 border-b border-stone-800">
+                        <div className="text-xs font-bold text-stone-100">{state.currentUser.name}</div>
+                        <div className="text-[11px] text-stone-400 font-mono truncate">{state.currentUser.email}</div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-emerald-950 text-emerald-300 border border-emerald-800">
+                            Org {state.currentUser.role}
+                          </span>
+                          {(state.currentUser.isPlatformOwner || state.currentUser.platformRole === 'PLATFORM_OWNER' || state.currentUser.email === 'oryemajoseph3@gmail.com') && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              Platform CEO
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="py-1">
+                        <button
+                          onClick={() => {
+                            setShowAccountMenu(false);
+                            appStore.loginWithGoogle();
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:text-white hover:bg-stone-800 flex items-center gap-2 transition-colors"
+                        >
+                          <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Switch Google Account</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowAccountMenu(false);
+                            appStore.logout();
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-300 hover:text-red-200 hover:bg-red-950/40 flex items-center gap-2 transition-colors"
+                        >
+                          <LogOut className="w-3.5 h-3.5 text-red-400" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              ) : (
                 <button
                   onClick={() => appStore.loginWithGoogle()}
-                  className="px-2 py-1 bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white rounded border border-stone-700 text-xs font-medium transition-colors"
-                  title="Switch Account / Sign In with Google"
+                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                 >
-                  Account
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Sign In</span>
                 </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => appStore.loginWithGoogle()}
-                className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
-              >
-                Sign In
-              </button>
-            )}
+              )}
+            </div>
 
             {/* Role Switcher Pill (for testing Admin vs Staff vs Viewer permissions) */}
             <div className="bg-stone-800 border border-stone-700 rounded px-2 py-1 flex items-center gap-1.5 text-xs">
@@ -331,6 +399,26 @@ export const Navigation: React.FC<NavigationProps> = ({
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>Audit Trail</span>
           </button>
+
+          {/* CEO & Platform Owner Governance Tab (Exclusive to PLATFORM_OWNER) */}
+          {(state.currentUser.isPlatformOwner || state.currentUser.platformRole === 'PLATFORM_OWNER' || state.currentUser.email === 'oryemajoseph3@gmail.com') && (
+            <button
+              onClick={() => setActiveTab('owner')}
+              className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all border ${
+                activeTab === 'owner'
+                  ? 'bg-amber-500 text-stone-950 border-amber-400 shadow-md ring-2 ring-amber-400/40'
+                  : 'bg-stone-800/80 text-amber-300 border-amber-500/30 hover:bg-stone-800 hover:border-amber-400/60'
+              }`}
+            >
+              <Crown className={`w-3.5 h-3.5 ${activeTab === 'owner' ? 'text-stone-950' : 'text-amber-400'}`} />
+              <span>CEO Platform Governance</span>
+              <span className={`px-1.5 py-0.2 text-[9px] font-black uppercase rounded ${
+                activeTab === 'owner' ? 'bg-stone-950 text-amber-400' : 'bg-amber-500/20 text-amber-300'
+              }`}>
+                Owner
+              </span>
+            </button>
+          )}
 
         </div>
       </div>

@@ -47,7 +47,9 @@ function loadInitialState(): AppState {
       email: 'oryemajoseph3@gmail.com',
       role: 'admin',
       organizationId: 'org-glc-01',
-      title: 'Head of Export Operations & Quality Assurance'
+      title: 'Platform Operator & CEO',
+      isPlatformOwner: true,
+      platformRole: 'PLATFORM_OWNER'
     },
     organizations: INITIAL_ORGANIZATIONS,
     users: INITIAL_USERS,
@@ -182,17 +184,34 @@ class Store {
   }
 
   // --- Authentication Actions ---
-  public async loginWithGoogle() {
+  public async loginWithGoogle(): Promise<{ success: boolean; error?: string }> {
     try {
       this.state.isLoading = true;
       this.notify();
       await signInWithPopup(auth, googleAuthProvider);
       await this.syncFromServer();
+      return { success: true };
     } catch (err: any) {
-      console.error('[Auth] Google sign in failed:', err);
+      const code = err?.code || '';
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        // User closed or cancelled the popup window intentionally; reset loading gracefully
+        this.state.isLoading = false;
+        this.notify();
+        return { success: false, error: 'Popup closed' };
+      }
+
+      if (code === 'auth/popup-blocked') {
+        this.state.isLoading = false;
+        this.state.syncError = 'Sign-in popup was blocked by browser. Please allow popups for this site.';
+        this.notify();
+        return { success: false, error: 'Popup blocked' };
+      }
+
+      console.warn('[Auth] Google sign in note:', err?.message || err);
       this.state.isLoading = false;
-      this.state.syncError = err.message;
+      this.state.syncError = err?.message;
       this.notify();
+      return { success: false, error: err?.message };
     }
   }
 

@@ -1,7 +1,8 @@
 import { auth } from '../lib/firebase';
 import { 
   Farmer, FarmPlot, Delivery, Lot, Shipment, DocumentRecord, 
-  AuditLog, TraceabilityEvent, ReadinessScorecard, Organization, User 
+  AuditLog, TraceabilityEvent, ReadinessScorecard, Organization, User,
+  OwnerOverviewMetrics, OwnerRevenueData, BusinessExpense, OwnerCustomerRecord, OwnerAlert
 } from '../types';
 
 async function getAuthHeader(): Promise<HeadersInit> {
@@ -507,6 +508,132 @@ export const api = {
     const headers = await getAuthHeader();
     const res = await fetch('/api/payments', { headers });
     if (!res.ok) throw new Error('Failed to fetch payment history');
+    return res.json();
+  },
+
+  // =========================================================================
+  // PLATFORM OWNER & CEO GOVERNANCE API
+  // =========================================================================
+
+  async getOwnerOverview(): Promise<OwnerOverviewMetrics> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/owner/overview', { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load platform owner overview');
+    }
+    return res.json();
+  },
+
+  async getOwnerRevenue(timeframe: '30d' | '90d' | '365d' | 'all' = '30d'): Promise<OwnerRevenueData> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/owner/revenue?timeframe=${timeframe}`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load revenue analytics');
+    }
+    return res.json();
+  },
+
+  async getOwnerExpenses(category?: string): Promise<{ expenses: BusinessExpense[]; summary: any }> {
+    const headers = await getAuthHeader();
+    const url = category ? `/api/owner/expenses?category=${encodeURIComponent(category)}` : '/api/owner/expenses';
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch business expenses');
+    }
+    return res.json();
+  },
+
+  async createOwnerExpense(data: {
+    amount: number;
+    currency?: string;
+    category: string;
+    description: string;
+    date: string;
+    vendor: string;
+    recurring?: boolean;
+    receiptReference?: string;
+    notes?: string;
+  }): Promise<{ success: boolean; expense: BusinessExpense }> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/owner/expenses', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to record expense');
+    }
+    return res.json();
+  },
+
+  async deleteOwnerExpense(id: string): Promise<{ success: boolean; id: string }> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/owner/expenses/${id}`, {
+      method: 'DELETE',
+      headers
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to delete expense');
+    }
+    return res.json();
+  },
+
+  async getOwnerCustomers(): Promise<OwnerCustomerRecord[]> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/owner/customers', { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load customer accounts');
+    }
+    return res.json();
+  },
+
+  async updateCustomerStatus(id: string, status: string): Promise<any> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/owner/customers/${id}/status`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ status })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update organization status');
+    }
+    return res.json();
+  },
+
+  async getOwnerSubscriptions(): Promise<any[]> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/owner/subscriptions', { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch subscriptions');
+    }
+    return res.json();
+  },
+
+  async getOwnerUsage(): Promise<any> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/owner/usage', { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch usage metrics');
+    }
+    return res.json();
+  },
+
+  async getOwnerAlerts(): Promise<OwnerAlert[]> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/owner/alerts', { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch alerts');
+    }
     return res.json();
   }
 };

@@ -11,6 +11,7 @@ import { FarmersView } from './components/FarmersView';
 import { FarmMapView } from './components/FarmMapView';
 import { DocumentsView } from './components/DocumentsView';
 import { AuditTrailView } from './components/AuditTrailView';
+import { OwnerDashboardView } from './components/OwnerDashboardView';
 import { EvidencePackModal } from './components/EvidencePackModal';
 import { BulkImportModal } from './components/BulkImportModal';
 import { OrganizationModal } from './components/OrganizationModal';
@@ -176,6 +177,12 @@ export default function App() {
           <AuditTrailView
             state={state}
             searchQuery={searchQuery}
+          />
+        )}
+
+        {activeTab === 'owner' && (
+          <OwnerDashboardView
+            state={state}
           />
         )}
 

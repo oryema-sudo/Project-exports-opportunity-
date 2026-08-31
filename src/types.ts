@@ -1,4 +1,5 @@
 export type UserRole = 'admin' | 'staff' | 'viewer';
+export type PlatformRole = 'PLATFORM_OWNER';
 
 export type OrganizationType = 'Exporter' | 'Cooperative' | 'Washing Station' | 'Processor' | 'Other';
 
@@ -9,6 +10,8 @@ export interface User {
   role: UserRole;
   organizationId: string;
   title?: string;
+  isPlatformOwner?: boolean;
+  platformRole?: PlatformRole | null;
 }
 
 export interface Organization {
@@ -326,6 +329,7 @@ export interface Subscription {
 export interface PaymentRecord {
   id: string;
   organizationId: string;
+  organizationName?: string;
   subscriptionId?: string;
   amountUgx: number;
   currency: string;
@@ -339,3 +343,148 @@ export interface PaymentRecord {
   description: string;
   createdAt: string;
 }
+
+export type ExpenseCategory =
+  | 'Cloud Infrastructure'
+  | 'UCDA Field Operations'
+  | 'Telecom & Mobile Money'
+  | 'Legal & Compliance'
+  | 'Salaries & Contractors'
+  | 'Office & Admin'
+  | 'Marketing'
+  | 'Other';
+
+export interface BusinessExpense {
+  id: string;
+  amount: number;
+  currency: string;
+  category: ExpenseCategory | string;
+  description: string;
+  date: string;
+  vendor: string;
+  recurring: boolean;
+  receiptReference?: string | null;
+  createdBy: string;
+  createdById?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OwnerOverviewMetrics {
+  mrrUgx: number;
+  arrUgx: number;
+  totalRevenueUgx: number;
+  cashReceivedUgx: number;
+  outstandingRevenueUgx: number;
+  failedRevenueUgx: number;
+  monthlyExpensesUgx: number;
+  totalExpensesUgx: number;
+  operatingProfitUgx: number;
+  monthlyOperatingProfitUgx: number;
+  totalOrganizations: number;
+  payingOrganizations: number;
+  trialOrganizations: number;
+  activeSubscriptionsCount: number;
+  newCustomers30d: number;
+  churnedCustomers30d: number;
+  revenueByPlan: {
+    planId: string;
+    planName: string;
+    mrrUgx: number;
+    subscribersCount: number;
+    percentage: number;
+  }[];
+  platformUsage: {
+    totalFarmers: number;
+    totalFarms: number;
+    totalDeliveries: number;
+    totalCoffeeQuantityKg: number;
+    totalLots: number;
+    totalShipments: number;
+    totalDocuments: number;
+    totalTraceabilityEvents: number;
+    totalAuditLogs: number;
+  };
+  recentPayments: PaymentRecord[];
+  failedPayments: PaymentRecord[];
+  alerts: OwnerAlert[];
+}
+
+export interface OwnerRevenueTimeseriesPoint {
+  date: string;
+  cashReceivedUgx: number;
+  outstandingUgx: number;
+  failedUgx: number;
+  expensesUgx: number;
+  netProfitUgx: number;
+  newCustomers: number;
+}
+
+export interface OwnerRevenueData {
+  timeframe: '30d' | '90d' | '365d' | 'all';
+  points: OwnerRevenueTimeseriesPoint[];
+  summary: {
+    totalCashReceived: number;
+    totalOutstanding: number;
+    totalExpenses: number;
+    totalNetProfit: number;
+    growthRatePercent: number;
+  };
+  revenueByPlan: {
+    planId: string;
+    planName: string;
+    mrrUgx: number;
+    subscribersCount: number;
+    percentage: number;
+  }[];
+  paymentMethodDistribution: {
+    method: PaymentMethod | string;
+    count: number;
+    amountUgx: number;
+    percentage: number;
+  }[];
+}
+
+export interface OwnerCustomerRecord {
+  id: string;
+  legalName: string;
+  type: OrganizationType | string;
+  registrationNumber: string;
+  country: string;
+  district: string;
+  address: string;
+  contactPhone: string;
+  email: string;
+  subscriptionPlan: string;
+  activeStatus: 'Active' | 'Inactive' | 'Trial' | 'Suspended' | string;
+  createdDate: string;
+  subscription?: {
+    id: string;
+    planId: string;
+    planName: string;
+    status: SubscriptionStatus;
+    billingCycle: 'monthly' | 'annual';
+    amountUgx: number;
+    currentPeriodEnd: string;
+  } | null;
+  usersCount: number;
+  farmersCount: number;
+  farmsCount: number;
+  shipmentsCount: number;
+  totalPaymentsUgx: number;
+  lastActiveDate?: string;
+}
+
+export interface OwnerAlert {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  message: string;
+  timestamp: string;
+  entityType?: 'payment' | 'subscription' | 'organization' | 'compliance' | 'system';
+  entityId?: string;
+  actionLabel?: string;
+  actionUrl?: string;
+}
+

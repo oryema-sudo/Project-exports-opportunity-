@@ -30,6 +30,8 @@ export const users = pgTable('users', {
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
   title: text('title').default('Compliance & Operations Officer'),
   isActive: boolean('is_active').notNull().default(true),
+  isPlatformOwner: boolean('is_platform_owner').notNull().default(false),
+  platformRole: text('platform_role'), // 'PLATFORM_OWNER' | null
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
 }, (table) => {
@@ -368,6 +370,30 @@ export const payments = pgTable('payments', {
     idempotencyIdx: uniqueIndex('payments_idempotency_idx').on(table.idempotencyKey),
     providerTxIdx: index('payments_provider_tx_idx').on(table.providerTransactionId),
     statusIdx: index('payments_status_idx').on(table.status)
+  };
+});
+
+// --- Platform Business Expenses Ledger (CEO / Platform-level operational expenses) ---
+export const businessExpenses = pgTable('business_expenses', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('UGX'),
+  category: text('category').notNull(), // 'Cloud Infrastructure' | 'UCDA Field Operations' | 'Telecom & Mobile Money' | 'Legal & Compliance' | 'Salaries & Contractors' | 'Office & Admin' | 'Marketing' | 'Other'
+  description: text('description').notNull(),
+  date: text('date').notNull(), // 'YYYY-MM-DD'
+  vendor: text('vendor').notNull(),
+  recurring: boolean('recurring').notNull().default(false),
+  receiptReference: text('receipt_reference'),
+  createdBy: text('created_by').notNull(),
+  createdById: text('created_by_id'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+}, (table) => {
+  return {
+    dateIdx: index('expenses_date_idx').on(table.date),
+    categoryIdx: index('expenses_category_idx').on(table.category),
+    recurringIdx: index('expenses_recurring_idx').on(table.recurring)
   };
 });
 
