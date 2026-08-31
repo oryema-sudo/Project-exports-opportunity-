@@ -307,6 +307,7 @@ ownerRouter.get('/overview', async (req: AuthRequest, res: Response) => {
     .orderBy(desc(payments.createdAt));
 
     let cashReceivedUgx = 0;
+    let refundedRevenueUgx = 0;
     let outstandingRevenueUgx = 0;
     let failedRevenueUgx = 0;
     const payingOrgSet = new Set<string>();
@@ -316,6 +317,8 @@ ownerRouter.get('/overview', async (req: AuthRequest, res: Response) => {
       if (p.status === 'successful') {
         cashReceivedUgx += amt;
         payingOrgSet.add(p.organizationId);
+      } else if (p.status === 'refunded') {
+        refundedRevenueUgx += amt;
       } else if (p.status === 'pending') {
         outstandingRevenueUgx += amt;
       } else if (p.status === 'failed') {
@@ -323,7 +326,7 @@ ownerRouter.get('/overview', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    const totalRevenueUgx = cashReceivedUgx; // Only successful collections count towards revenue
+    const totalRevenueUgx = cashReceivedUgx - refundedRevenueUgx; // Net cash collected
 
     // 3. Authoritative Expenses Calculation
     const allExpenses = await db.select().from(businessExpenses).orderBy(desc(businessExpenses.date));
@@ -339,7 +342,7 @@ ownerRouter.get('/overview', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    const operatingProfitUgx = cashReceivedUgx - totalExpensesUgx;
+    const operatingProfitUgx = totalRevenueUgx - totalExpensesUgx;
     const monthlyOperatingProfitUgx = mrrUgx - monthlyExpensesUgx;
 
     // 4. Organizations Snapshot
@@ -450,6 +453,7 @@ ownerRouter.get('/overview', async (req: AuthRequest, res: Response) => {
       arrUgx,
       totalRevenueUgx,
       cashReceivedUgx,
+      refundedRevenueUgx,
       outstandingRevenueUgx,
       failedRevenueUgx,
       monthlyExpensesUgx,
@@ -507,6 +511,7 @@ ownerRouter.get('/revenue', async (req: AuthRequest, res: Response) => {
     const pointsMap: Record<string, {
       date: string;
       cashReceivedUgx: number;
+      refundedUgx: number;
       outstandingUgx: number;
       failedUgx: number;
       expensesUgx: number;
@@ -520,6 +525,7 @@ ownerRouter.get('/revenue', async (req: AuthRequest, res: Response) => {
       pointsMap[dateStr] = {
         date: dateStr,
         cashReceivedUgx: 0,
+        refundedUgx: 0,
         outstandingUgx: 0,
         failedUgx: 0,
         expensesUgx: 0,
@@ -533,6 +539,7 @@ ownerRouter.get('/revenue', async (req: AuthRequest, res: Response) => {
       if (pointsMap[dateStr]) {
         const amt = Number(p.amountUgx) || 0;
         if (p.status === 'successful') pointsMap[dateStr]!.cashReceivedUgx += amt;
+        else if (p.status === 'refunded') pointsMap[dateStr]!.refundedUgx += amt;
         else if (p.status === 'pending') pointsMap[dateStr]!.outstandingUgx += amt;
         else if (p.status === 'failed') pointsMap[dateStr]!.failedUgx += amt;
       }
@@ -556,15 +563,17 @@ ownerRouter.get('/revenue', async (req: AuthRequest, res: Response) => {
 
     const points = Object.values(pointsMap).map(p => ({
       ...p,
-      netProfitUgx: p.cashReceivedUgx - p.expensesUgx
+      netProfitUgx: p.cashReceivedUgx - p.refundedUgx - p.expensesUgx
     }));
 
     let totalCashReceived = 0;
+    let totalRefunded = 0;
     let totalOutstanding = 0;
     let totalExpenses = 0;
 
     points.forEach(p => {
       totalCashReceived += p.cashReceivedUgx;
+      totalRefunded += p.refundedUgx;
       totalOutstanding += p.outstandingUgx;
       totalExpenses += p.expensesUgx;
     });
@@ -615,9 +624,10 @@ ownerRouter.get('/revenue', async (req: AuthRequest, res: Response) => {
       points,
       summary: {
         totalCashReceived,
+        totalRefunded,
         totalOutstanding,
         totalExpenses,
-        totalNetProfit: totalCashReceived - totalExpenses,
+        totalNetProfit: totalCashReceived - totalRefunded - totalExpenses,
         growthRatePercent: 18.5 // SaaS platform baseline growth rate
       },
       revenueByPlan,
@@ -797,6 +807,97 @@ ownerRouter.delete('/expenses/:id', async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * PATCH /api/owner/expenses/:id
+ * PUT /api/owner/expenses/:id
+ * Update business operational expense with strict validation and audit log
+ */
+const handleUpdateExpense = async (req: AuthRequest, res: Response) => {
+  try {
+    const expenseId = req.params.id as string;
+    const [existing] = await db.select().from(businessExpenses).where(eq(businessExpenses.id, expenseId)).limit(1);
+    if (!existing) {
+      return res.status(404).json({ error: 'Expense record not found' });
+    }
+
+    const schema = z.object({
+      amount: z.number().positive('Expense amount must be greater than zero').optional(),
+      currency: z.string().optional(),
+      category: z.enum([
+        'Cloud Infrastructure',
+        'UCDA Field Operations',
+        'Telecom & Mobile Money',
+        'Legal & Compliance',
+        'Salaries & Contractors',
+        'Office & Admin',
+        'Marketing',
+        'Other'
+      ]).or(z.string().min(2)).optional(),
+      description: z.string().min(3, 'Description must be at least 3 characters').optional(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be formatted as YYYY-MM-DD').optional(),
+      vendor: z.string().min(2, 'Vendor name is required').optional(),
+      recurring: z.boolean().optional(),
+      receiptReference: z.string().nullable().optional(),
+      notes: z.string().nullable().optional()
+    });
+
+    const parsed = schema.parse(req.body);
+
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+    if (parsed.amount !== undefined) updateData.amount = parsed.amount.toFixed(2);
+    if (parsed.currency !== undefined) updateData.currency = parsed.currency;
+    if (parsed.category !== undefined) updateData.category = parsed.category;
+    if (parsed.description !== undefined) updateData.description = parsed.description;
+    if (parsed.date !== undefined) updateData.date = parsed.date;
+    if (parsed.vendor !== undefined) updateData.vendor = parsed.vendor;
+    if (parsed.recurring !== undefined) updateData.recurring = parsed.recurring;
+    if (parsed.receiptReference !== undefined) updateData.receiptReference = parsed.receiptReference;
+    if (parsed.notes !== undefined) updateData.notes = parsed.notes;
+
+    const [updated] = await db.update(businessExpenses)
+      .set(updateData)
+      .where(eq(businessExpenses.id, expenseId))
+      .returning();
+
+    await logOwnerAudit(
+      req,
+      'Business Expense Updated',
+      'BusinessExpense',
+      expenseId,
+      `${existing.currency} ${existing.amount} - ${existing.vendor} (${existing.category})`,
+      `${updated!.currency} ${updated!.amount} - ${updated!.vendor} (${updated!.category})`
+    );
+
+    res.json({
+      success: true,
+      expense: {
+        id: updated!.id,
+        amount: Number(updated!.amount),
+        currency: updated!.currency,
+        category: updated!.category,
+        description: updated!.description,
+        date: updated!.date,
+        vendor: updated!.vendor,
+        recurring: updated!.recurring,
+        receiptReference: updated!.receiptReference,
+        createdBy: updated!.createdBy,
+        createdById: updated!.createdById,
+        notes: updated!.notes,
+        createdAt: updated!.createdAt.toISOString(),
+        updatedAt: updated!.updatedAt.toISOString()
+      }
+    });
+  } catch (err: any) {
+    console.error('[Owner API] Update expense error:', err);
+    res.status(400).json({ error: err.message || 'Failed to update business expense' });
+  }
+};
+
+ownerRouter.patch('/expenses/:id', handleUpdateExpense);
+ownerRouter.put('/expenses/:id', handleUpdateExpense);
+
+/**
  * GET /api/owner/customers
  * List all customer organizations with subscription status and operational metrics
  */
@@ -943,6 +1044,102 @@ ownerRouter.get('/subscriptions', async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     console.error('[Owner API] /subscriptions error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch subscriptions' });
+  }
+});
+
+/**
+ * PATCH /api/owner/subscriptions/:id
+ * Update subscription plan or status with audit log
+ */
+ownerRouter.patch('/subscriptions/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const subId = req.params.id as string;
+    const { status, planId, planName, amountUgx, billingCycle } = req.body;
+
+    const [existing] = await db.select().from(subscriptions).where(eq(subscriptions.id, subId)).limit(1);
+    if (!existing) {
+      return res.status(404).json({ error: 'Subscription record not found' });
+    }
+
+    const updateData: any = {
+      updatedAt: new Date()
+    };
+    if (status) updateData.status = status;
+    if (planId) updateData.planId = planId;
+    if (planName) updateData.planName = planName;
+    if (amountUgx !== undefined) updateData.amountUgx = amountUgx.toString();
+    if (billingCycle) updateData.billingCycle = billingCycle;
+
+    const [updated] = await db.update(subscriptions)
+      .set(updateData)
+      .where(eq(subscriptions.id, subId))
+      .returning();
+
+    await logOwnerAudit(
+      req,
+      'Subscription Mutated',
+      'Subscription',
+      subId,
+      `${existing.planName} (${existing.status})`,
+      `${updated!.planName} (${updated!.status})`
+    );
+
+    res.json({
+      success: true,
+      message: `Subscription ${subId} updated`,
+      subscription: updated
+    });
+  } catch (err: any) {
+    console.error('[Owner API] PATCH /subscriptions/:id error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update subscription' });
+  }
+});
+
+/**
+ * POST /api/owner/payments/:id/refund
+ * Process payment refund, update status to 'refunded' and record audit trail
+ */
+ownerRouter.post('/payments/:id/refund', async (req: AuthRequest, res: Response) => {
+  try {
+    const paymentId = req.params.id as string;
+    const { reason } = req.body || {};
+
+    const [existing] = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
+    if (!existing) {
+      return res.status(404).json({ error: 'Payment transaction record not found' });
+    }
+
+    if (existing.status !== 'successful') {
+      return res.status(400).json({
+        error: `Only successful payments can be refunded. Current transaction status is '${existing.status}'.`
+      });
+    }
+
+    const [updated] = await db.update(payments)
+      .set({
+        status: 'refunded',
+        description: `${existing.description} [REFUNDED: ${reason || 'Customer requested'}]`
+      })
+      .where(eq(payments.id, paymentId))
+      .returning();
+
+    await logOwnerAudit(
+      req,
+      'Payment Refunded',
+      'Payment',
+      paymentId,
+      `UGX ${existing.amountUgx} (successful)`,
+      `UGX ${existing.amountUgx} (refunded - ${reason || 'Authorized by Platform Owner'})`
+    );
+
+    res.json({
+      success: true,
+      message: `Payment ${paymentId} marked as refunded`,
+      payment: updated
+    });
+  } catch (err: any) {
+    console.error('[Owner API] Refund payment error:', err);
+    res.status(500).json({ error: err.message || 'Failed to refund payment' });
   }
 });
 

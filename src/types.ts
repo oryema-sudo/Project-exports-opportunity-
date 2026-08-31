@@ -376,6 +376,7 @@ export interface OwnerOverviewMetrics {
   arrUgx: number;
   totalRevenueUgx: number;
   cashReceivedUgx: number;
+  refundedRevenueUgx: number;
   outstandingRevenueUgx: number;
   failedRevenueUgx: number;
   monthlyExpensesUgx: number;
@@ -414,6 +415,7 @@ export interface OwnerOverviewMetrics {
 export interface OwnerRevenueTimeseriesPoint {
   date: string;
   cashReceivedUgx: number;
+  refundedUgx: number;
   outstandingUgx: number;
   failedUgx: number;
   expensesUgx: number;
@@ -426,6 +428,7 @@ export interface OwnerRevenueData {
   points: OwnerRevenueTimeseriesPoint[];
   summary: {
     totalCashReceived: number;
+    totalRefunded: number;
     totalOutstanding: number;
     totalExpenses: number;
     totalNetProfit: number;

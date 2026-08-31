@@ -42,14 +42,14 @@ function loadInitialState(): AppState {
   return {
     activeOrgId: 'org-glc-01',
     currentUser: INITIAL_USERS[0] || {
-      id: 'usr-admin-01',
-      name: 'Oryema Joseph',
-      email: 'oryemajoseph3@gmail.com',
+      id: 'usr-001',
+      name: 'Mbabazi Grace',
+      email: 'g.mbabazi@greatlakescoffee.ug',
       role: 'admin',
       organizationId: 'org-glc-01',
-      title: 'Platform Operator & CEO',
-      isPlatformOwner: true,
-      platformRole: 'PLATFORM_OWNER'
+      title: 'Head of Quality & Export Compliance',
+      isPlatformOwner: false,
+      platformRole: null
     },
     organizations: INITIAL_ORGANIZATIONS,
     users: INITIAL_USERS,

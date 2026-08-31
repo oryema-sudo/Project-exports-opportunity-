@@ -215,7 +215,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-emerald-950 text-emerald-300 border border-emerald-800">
                             Org {state.currentUser.role}
                           </span>
-                          {(state.currentUser.isPlatformOwner || state.currentUser.platformRole === 'PLATFORM_OWNER' || state.currentUser.email === 'oryemajoseph3@gmail.com') && (
+                          {(state.currentUser.isPlatformOwner || state.currentUser.platformRole === 'PLATFORM_OWNER') && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
                               Platform CEO
                             </span>
@@ -401,7 +401,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           </button>
 
           {/* CEO & Platform Owner Governance Tab (Exclusive to PLATFORM_OWNER) */}
-          {(state.currentUser.isPlatformOwner || state.currentUser.platformRole === 'PLATFORM_OWNER' || state.currentUser.email === 'oryemajoseph3@gmail.com') && (
+          {(state.currentUser.isPlatformOwner || state.currentUser.platformRole === 'PLATFORM_OWNER') && (
             <button
               onClick={() => setActiveTab('owner')}
               className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all border ${

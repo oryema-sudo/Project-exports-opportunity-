@@ -69,9 +69,8 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ state })
     notes: ''
   });
 
-  const isOwner = state.currentUser.isPlatformOwner || 
-                  state.currentUser.platformRole === 'PLATFORM_OWNER' || 
-                  state.currentUser.email === 'oryemajoseph3@gmail.com';
+  const isOwner = Boolean(state.currentUser.isPlatformOwner || 
+                          state.currentUser.platformRole === 'PLATFORM_OWNER');
 
   const loadDashboardData = async () => {
     try {

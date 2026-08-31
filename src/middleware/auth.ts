@@ -24,11 +24,6 @@ export interface AuthRequest extends Request {
   decodedToken?: DecodedIdToken;
 }
 
-// Configured platform owner email
-export const getPlatformOwnerEmail = (): string => {
-  return (process.env.PLATFORM_OWNER_EMAIL || 'oryemajoseph3@gmail.com').trim().toLowerCase();
-};
-
 /**
  * Extracts and verifies Firebase ID Token without requiring an existing organization membership.
  * Used for onboarding and invitation acceptance routes.
@@ -156,8 +151,7 @@ export const requireAuth = async (
       });
     }
 
-    const ownerEmail = getPlatformOwnerEmail();
-    const isOwner = dbUser.isPlatformOwner || dbUser.platformRole === 'PLATFORM_OWNER' || (!!dbUser.email && dbUser.email.toLowerCase() === ownerEmail);
+    const isOwner = Boolean(dbUser.isPlatformOwner || dbUser.platformRole === 'PLATFORM_OWNER');
 
     req.user = {
       id: dbUser.id,
@@ -233,6 +227,7 @@ export const requirePlatformOwner = async (
     const existingUsers = await db.select().from(users).where(eq(users.uid, uid)).limit(1);
     let dbUser = existingUsers[0];
 
+    // If UID not yet linked, check if existing record exists by email and link it
     if (!dbUser && email) {
       const userByEmail = await db.select().from(users).where(eq(users.email, email)).limit(1);
       if (userByEmail.length > 0) {
@@ -247,36 +242,31 @@ export const requirePlatformOwner = async (
       }
     }
 
-    const ownerEmail = getPlatformOwnerEmail();
-    const isOwnerByEmail = !!email && email === ownerEmail;
-    const isOwnerByDb = !!(dbUser?.isPlatformOwner || dbUser?.platformRole === 'PLATFORM_OWNER');
+    if (!dbUser) {
+      return res.status(403).json({
+        error: 'Forbidden: Platform Owner authorization required. User not registered as platform operator.'
+      });
+    }
 
-    // Strict validation: Must either be marked in DB as platform owner OR match configured owner email
-    if (!isOwnerByDb && !isOwnerByEmail) {
-      // Standard customer admin, staff, or viewer attempting to access platform owner endpoint
+    const isOwner = Boolean(dbUser.isPlatformOwner || dbUser.platformRole === 'PLATFORM_OWNER');
+
+    // Strict validation: Must be explicitly assigned PLATFORM_OWNER authority in database
+    if (!isOwner) {
+      // Customer admin, staff, or viewer attempting to access platform owner endpoint
       return res.status(403).json({
         error: 'Forbidden: Platform Owner authorization required. Customer organization administrators cannot access platform governance.'
       });
     }
 
-    // If user matches owner email but flag not yet marked in DB, update it
-    if (isOwnerByEmail && dbUser && (!dbUser.isPlatformOwner || dbUser.platformRole !== 'PLATFORM_OWNER')) {
-      const [updated] = await db.update(users)
-        .set({ isPlatformOwner: true, platformRole: 'PLATFORM_OWNER', updatedAt: new Date() })
-        .where(eq(users.id, dbUser.id))
-        .returning();
-      dbUser = updated;
-    }
-
     req.user = {
-      id: dbUser ? dbUser.id : 'platform-owner-id',
-      uid: uid,
-      email: email || (dbUser?.email || ownerEmail),
-      name: dbUser ? dbUser.name : (decodedToken.name || 'Platform CEO / Owner'),
-      role: (dbUser ? dbUser.role : 'admin') as UserRole,
-      organizationId: dbUser ? dbUser.organizationId : '',
-      title: 'Platform Operator & CEO',
-      isActive: true,
+      id: dbUser.id,
+      uid: dbUser.uid,
+      email: dbUser.email,
+      name: dbUser.name,
+      role: dbUser.role as UserRole,
+      organizationId: dbUser.organizationId,
+      title: dbUser.title || 'Platform Operator & CEO',
+      isActive: dbUser.isActive,
       isPlatformOwner: true,
       platformRole: 'PLATFORM_OWNER'
     };
