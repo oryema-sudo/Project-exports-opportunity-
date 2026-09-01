@@ -1,0 +1,23 @@
+{
+  "short_name": "ASTROKAHAWA",
+  "name": "ASTROKAHAWA — From origin to export, with evidence.",
+  "description": "ASTROKAHAWA is a digital traceability and export-readiness platform for coffee exporters, connecting farm-level origin data, coffee lots, shipments, documentation and evidence in one system.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "48x48 72x72 96x96 128x128 256x256"
+    },
+    {
+      "src": "/astrokahawa-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0C1310",
+  "theme_color": "#064E3B",
+  "display": "standalone",
+  "orientation": "portrait"
+}

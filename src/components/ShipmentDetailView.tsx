@@ -240,7 +240,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
         </div>
 
         {/* 4 Score Breakdown Meters */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           
           <div className="bg-white/90 p-2.5 rounded border border-stone-200">
             <div className="flex justify-between text-xs mb-1">
@@ -647,7 +647,62 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
               </span>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Cards for Contributing Smallholders (< md) */}
+            <div className="block md:hidden space-y-3">
+              {linkedFarms.map(farm => {
+                const farmer = linkedFarmers.find(f => f.id === farm.farmerId);
+                const hasValidGps = farm.latitude !== 0 && farm.longitude !== 0;
+
+                return (
+                  <div key={farm.id} className="p-3.5 bg-stone-50 rounded-lg border border-stone-200 space-y-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-stone-900">{farm.farmName}</div>
+                        <div className="text-[11px] text-stone-500">{farmer?.fullName || 'Unknown'} ({farmer?.id})</div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
+                        farm.verificationStatus === 'Verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {farm.verificationStatus}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-stone-200">
+                      <div>
+                        <span className="text-[10px] text-stone-400 font-bold uppercase block">Location</span>
+                        <span className="text-stone-700 font-medium">{farm.district}, {farm.subcounty}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-stone-400 font-bold uppercase block">Plot Size</span>
+                        <span className="font-bold text-stone-800">{farm.plotArea} {farm.areaUnit}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-1 border-t border-stone-200">
+                      <span className="text-[10px] text-stone-400 font-bold uppercase block mb-0.5">Geolocation</span>
+                      {hasValidGps ? (
+                        <div className="font-mono text-[11px] text-stone-900">
+                          {farm.latitude.toFixed(4)}°, {farm.longitude.toFixed(4)}°
+                          <span className="text-[10px] text-emerald-700 ml-1">
+                            ({farm.geometryType === 'Polygon' ? 'Polygon' : 'Point GPS'})
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setFixingFarm(farm)}
+                          className="w-full text-center text-red-700 font-bold bg-red-50 hover:bg-red-100 py-1.5 rounded border border-red-200 text-xs"
+                        >
+                          🔴 Missing GPS - Click to Record
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50">

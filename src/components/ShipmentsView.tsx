@@ -121,32 +121,34 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <span className="font-bold text-stone-500 uppercase tracking-wider text-[10px] flex items-center gap-1">
             <Filter className="w-3 h-3 text-stone-400" /> Filter:
           </span>
 
-          <select
-            value={filterReadiness}
-            onChange={(e) => setFilterReadiness(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Readiness Levels ({shipments.length})</option>
-            <option value="GREEN">🟢 Ready for Review ({shipments.filter(s => s.readinessStatus === 'GREEN').length})</option>
-            <option value="YELLOW">🟡 Review Required ({shipments.filter(s => s.readinessStatus === 'YELLOW').length})</option>
-            <option value="RED">🔴 Blocked / Missing Data ({shipments.filter(s => s.readinessStatus === 'RED').length})</option>
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterReadiness}
+              onChange={(e) => setFilterReadiness(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Readiness Levels ({shipments.length})</option>
+              <option value="GREEN">🟢 Ready for Review ({shipments.filter(s => s.readinessStatus === 'GREEN').length})</option>
+              <option value="YELLOW">🟡 Review Required ({shipments.filter(s => s.readinessStatus === 'YELLOW').length})</option>
+              <option value="RED">🔴 Blocked / Missing Data ({shipments.filter(s => s.readinessStatus === 'RED').length})</option>
+            </select>
 
-          <select
-            value={filterCoffeeType}
-            onChange={(e) => setFilterCoffeeType(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Coffee Types</option>
-            <option value="Robusta">Robusta (Central & Masaka)</option>
-            <option value="Arabica">Arabica (Elgon & Rwenzori)</option>
-          </select>
+            <select
+              value={filterCoffeeType}
+              onChange={(e) => setFilterCoffeeType(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Coffee Types</option>
+              <option value="Robusta">Robusta (Central & Masaka)</option>
+              <option value="Arabica">Arabica (Elgon & Rwenzori)</option>
+            </select>
+          </div>
         </div>
 
         <div className="text-stone-500 font-mono text-xs">
@@ -276,7 +278,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Scheduled Shipment Date</label>
                   <input

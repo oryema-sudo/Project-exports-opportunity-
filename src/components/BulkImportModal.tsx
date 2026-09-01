@@ -115,7 +115,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             />
           </div>
 
-          <div className="flex items-end justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2">
             <button
               type="button"
               onClick={handleDownloadTemplate}

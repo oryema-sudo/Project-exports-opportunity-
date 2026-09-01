@@ -299,32 +299,34 @@ export const FarmMapView: React.FC<FarmMapViewProps> = ({
       </div>
 
       {/* Filter Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <span className="font-bold text-stone-500 uppercase tracking-wider text-[10px] flex items-center gap-1">
             <Filter className="w-3 h-3 text-stone-400" /> Filter:
           </span>
 
-          <select
-            value={filterGeometry}
-            onChange={(e) => setFilterGeometry(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Geometry Formats ({farms.length})</option>
-            <option value="Polygon">🌱 Polygons ({farms.filter(f => f.geometryType === 'Polygon').length})</option>
-            <option value="Point">📍 Point Coordinates ({farms.filter(f => f.geometryType === 'Point').length})</option>
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterGeometry}
+              onChange={(e) => setFilterGeometry(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Geometry Formats ({farms.length})</option>
+              <option value="Polygon">🌱 Polygons ({farms.filter(f => f.geometryType === 'Polygon').length})</option>
+              <option value="Point">📍 Point Coordinates ({farms.filter(f => f.geometryType === 'Point').length})</option>
+            </select>
 
-          <select
-            value={filterDistrict}
-            onChange={(e) => setFilterDistrict(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Districts</option>
-            {UGANDA_DISTRICTS.map(d => (
-              <option key={d.name} value={d.name}>{d.name} ({d.coffeeType})</option>
-            ))}
-          </select>
+            <select
+              value={filterDistrict}
+              onChange={(e) => setFilterDistrict(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Districts</option>
+              {UGANDA_DISTRICTS.map(d => (
+                <option key={d.name} value={d.name}>{d.name} ({d.coffeeType})</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="text-stone-600 font-mono text-xs">
@@ -336,16 +338,16 @@ export const FarmMapView: React.FC<FarmMapViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Interactive Leaflet Map (2 cols) */}
-        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm flex flex-col h-[520px]">
-          <div className="bg-stone-900 text-stone-200 px-4 py-2 text-xs font-semibold flex items-center justify-between">
+        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm flex flex-col h-[380px] sm:h-[480px] lg:h-[520px]">
+          <div className="bg-stone-900 text-stone-200 px-3 sm:px-4 py-2 text-xs font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>Uganda Coffee Geolocation Layer (WGS84 EPSG:4326)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+              <span className="truncate">Uganda Coffee Geolocation Layer (WGS84 EPSG:4326)</span>
             </div>
             <span className="text-[11px] text-stone-400 font-mono">GNSS Precision: Mobile RTK/GNSS</span>
           </div>
 
-          <div ref={mapContainerRef} className="flex-1 w-full z-10"></div>
+          <div ref={mapContainerRef} className="flex-1 w-full z-10 min-h-[300px]"></div>
         </div>
 
         {/* Selected Farm Detail Inspector (1 col) */}
@@ -468,7 +470,7 @@ export const FarmMapView: React.FC<FarmMapViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">District</label>
                   <select
@@ -494,7 +496,7 @@ export const FarmMapView: React.FC<FarmMapViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Latitude (° N/S) [-1.5 to 4.3]</label>
                   <input
@@ -522,7 +524,7 @@ export const FarmMapView: React.FC<FarmMapViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Plot Area (Hectares)</label>
                   <input

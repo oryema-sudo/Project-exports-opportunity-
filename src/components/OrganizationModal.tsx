@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Organization } from '../types';
 import { appStore } from '../services/store';
 import { api } from '../services/api';
+import { AstroKahawaIcon, AstroKahawaLogo } from './AstroKahawaLogo';
 import { 
   Building2, 
   Users, 
@@ -258,7 +259,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
         {/* Tab 1: Profile */}
         {activeTab === 'profile' && (
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="bg-stone-50 p-3 rounded border border-stone-200 grid grid-cols-2 gap-3">
+            <div className="bg-stone-50 p-3 rounded border border-stone-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <span className="text-[10px] text-stone-500 uppercase font-semibold">Tenant ID</span>
                 <div className="font-bold text-stone-900 font-mono text-xs">{activeOrg.id}</div>
@@ -280,7 +281,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-stone-700 font-semibold mb-1">Headquarters District</label>
                 <input
@@ -304,7 +305,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-stone-700 font-semibold mb-1">Contact Email</label>
                 <input
@@ -366,7 +367,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
                 Generate a secure, single-use onboarding token for staff or auditors to join this organization.
               </p>
 
-              <form onSubmit={handleCreateInvite} className="flex gap-2 pt-1">
+              <form onSubmit={handleCreateInvite} className="flex flex-col sm:flex-row gap-2 pt-1">
                 <input
                   type="email"
                   required
@@ -411,95 +412,95 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
               )}
             </div>
 
-            {/* Active Team Members */}
-            <div className="space-y-2">
-              <h3 className="font-bold text-stone-900">Current Organization Members</h3>
-              <div className="border border-stone-200 rounded overflow-hidden">
-                <table className="w-full text-left">
-                  <thead className="bg-stone-100 text-stone-600 border-b border-stone-200 text-[10px] uppercase font-bold">
-                    <tr>
-                      <th className="p-2">Name</th>
-                      <th className="p-2">Email</th>
-                      <th className="p-2">Role</th>
-                      <th className="p-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {teamMembers.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="p-3 text-stone-400 text-center">
-                          {loadingTeam ? 'Loading members...' : 'Primary Administrator'}
-                        </td>
-                      </tr>
-                    ) : (
-                      teamMembers.map((m) => (
-                        <tr key={m.id} className="hover:bg-stone-50">
-                          <td className="p-2 font-bold text-stone-900">{m.name}</td>
-                          <td className="p-2 font-mono text-stone-600">{m.email}</td>
-                          <td className="p-2">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                              m.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                              m.role === 'staff' ? 'bg-blue-100 text-blue-800' : 'bg-stone-100 text-stone-700'
-                            }`}>
-                              {m.role.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="p-2">
-                            <span className="text-emerald-700 font-bold">Active</span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Pending Invitations */}
-            {invitations.length > 0 && (
+              {/* Active Team Members */}
               <div className="space-y-2">
-                <h3 className="font-bold text-stone-900">Pending Invitations</h3>
-                <div className="border border-stone-200 rounded overflow-hidden">
-                  <table className="w-full text-left">
+                <h3 className="font-bold text-stone-900">Current Organization Members</h3>
+                <div className="border border-stone-200 rounded overflow-x-auto">
+                  <table className="w-full text-left min-w-[340px]">
                     <thead className="bg-stone-100 text-stone-600 border-b border-stone-200 text-[10px] uppercase font-bold">
                       <tr>
-                        <th className="p-2">Invited Email</th>
+                        <th className="p-2">Name</th>
+                        <th className="p-2">Email</th>
                         <th className="p-2">Role</th>
                         <th className="p-2">Status</th>
-                        <th className="p-2 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
-                      {invitations.map((inv) => (
-                        <tr key={inv.id} className="hover:bg-stone-50">
-                          <td className="p-2 font-mono text-stone-800">{inv.email}</td>
-                          <td className="p-2 uppercase font-semibold text-stone-600">{inv.role}</td>
-                          <td className="p-2">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                              inv.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                              inv.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'
-                            }`}>
-                              {inv.status}
-                            </span>
-                          </td>
-                          <td className="p-2 text-right">
-                            {inv.status === 'pending' && (
-                              <button
-                                onClick={() => handleRevokeInvite(inv.id)}
-                                className="text-red-600 hover:text-red-800 font-bold text-[10px] p-1"
-                                title="Revoke Invitation"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 inline" /> Revoke
-                              </button>
-                            )}
+                      {teamMembers.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="p-3 text-stone-400 text-center">
+                            {loadingTeam ? 'Loading members...' : 'Primary Administrator'}
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        teamMembers.map((m) => (
+                          <tr key={m.id} className="hover:bg-stone-50">
+                            <td className="p-2 font-bold text-stone-900">{m.name}</td>
+                            <td className="p-2 font-mono text-stone-600">{m.email}</td>
+                            <td className="p-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                m.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                                m.role === 'staff' ? 'bg-blue-100 text-blue-800' : 'bg-stone-100 text-stone-700'
+                              }`}>
+                                {m.role.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="p-2">
+                              <span className="text-emerald-700 font-bold">Active</span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
-            )}
+
+              {/* Pending Invitations */}
+              {invitations.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-bold text-stone-900">Pending Invitations</h3>
+                  <div className="border border-stone-200 rounded overflow-x-auto">
+                    <table className="w-full text-left min-w-[340px]">
+                      <thead className="bg-stone-100 text-stone-600 border-b border-stone-200 text-[10px] uppercase font-bold">
+                        <tr>
+                          <th className="p-2">Invited Email</th>
+                          <th className="p-2">Role</th>
+                          <th className="p-2">Status</th>
+                          <th className="p-2 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {invitations.map((inv) => (
+                          <tr key={inv.id} className="hover:bg-stone-50">
+                            <td className="p-2 font-mono text-stone-800">{inv.email}</td>
+                            <td className="p-2 uppercase font-semibold text-stone-600">{inv.role}</td>
+                            <td className="p-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                inv.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                                inv.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'
+                              }`}>
+                                {inv.status}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right">
+                              {inv.status === 'pending' && (
+                                <button
+                                  onClick={() => handleRevokeInvite(inv.id)}
+                                  className="text-red-600 hover:text-red-800 font-bold text-[10px] p-1"
+                                  title="Revoke Invitation"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 inline" /> Revoke
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
           </div>
         )}
 
@@ -709,8 +710,8 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
               </div>
 
               {/* Phone / Details Row */}
-              <div className="flex gap-2 pt-1 items-center">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row gap-2 pt-1 items-start sm:items-center">
+                <div className="w-full sm:flex-1">
                   <label className="block text-[11px] font-bold text-stone-700 mb-0.5">
                     {checkoutMethod === 'CARD' ? 'Billing Contact Phone' : 'Uganda Mobile Money MSISDN (07X...)'}
                   </label>
@@ -723,11 +724,11 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
                     className="w-full bg-white border border-stone-300 rounded px-2.5 py-1.5 text-xs font-mono font-bold focus:ring-1 focus:ring-emerald-600 focus:outline-none"
                   />
                 </div>
-                <div className="pt-4 shrink-0">
+                <div className="pt-1 sm:pt-4 w-full sm:w-auto shrink-0">
                   <button
                     type="submit"
                     disabled={isProcessingPayment}
-                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded text-xs transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                    className="w-full sm:w-auto px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
                   >
                     {isProcessingPayment ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
                     <span>Initiate Payment</span>
@@ -780,8 +781,8 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
                   <RefreshCw className="w-3 h-3" /> Refresh
                 </button>
               </div>
-              <div className="border border-stone-200 rounded overflow-hidden">
-                <table className="w-full text-left">
+              <div className="border border-stone-200 rounded overflow-x-auto">
+                <table className="w-full text-left min-w-[420px]">
                   <thead className="bg-stone-100 text-stone-600 border-b border-stone-200 text-[10px] uppercase font-bold">
                     <tr>
                       <th className="p-2">Date</th>
@@ -831,13 +832,12 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
         {activeTab === 'regulatory' && (
           <div className="space-y-3 p-4 bg-stone-50 border border-stone-200 rounded leading-relaxed text-stone-700">
             <div className="flex items-center gap-2 text-stone-900 font-bold text-sm">
-              <ShieldCheck className="w-5 h-5 text-emerald-700" />
-              Statutory EUDR & Commercial Positioning Statement
+              <AstroKahawaIcon size={20} showBackground={false} />
+              ASTROKAHAWA Commercial Positioning & Regulatory Statement
             </div>
             
             <p className="text-xs">
-              <strong>Commercial Positioning:</strong> This software is marketed and operated strictly as 
-              <em> Coffee Traceability, Smallholder Due-Diligence Evidence Management, and Export-Readiness Software</em>.
+              <strong>Commercial Positioning:</strong> ASTROKAHAWA is a digital traceability and export-readiness platform for coffee exporters, connecting farm-level origin data, coffee lots, shipments, documentation and evidence in one system.
             </p>
 
             <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-xs space-y-1.5">
@@ -846,7 +846,7 @@ export const OrganizationModal: React.FC<OrganizationModalProps> = ({
                 Legal & Statutory Notice:
               </div>
               <p>
-                Project Export Opportunity is a <strong>software operating layer</strong> that collects, validates, and organizes
+                ASTROKAHAWA is a <strong>software operating layer</strong> that collects, validates, and organizes
                 supply-chain due diligence data. It <strong>does NOT</strong> issue statutory EUDR certification or replace mandatory
                 regulatory filings with the European Commission (TRACES NT) or Uganda Coffee Development Authority (UCDA).
               </p>

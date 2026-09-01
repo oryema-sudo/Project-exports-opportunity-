@@ -629,8 +629,50 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ state })
             </div>
           </div>
 
-          {/* Expenses Table */}
-          <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 space-y-4">
+          {/* Expenses Mobile Cards (< md screens) */}
+          <div className="block md:hidden space-y-3">
+            {filteredExpenses.length > 0 ? (
+              filteredExpenses.map(exp => (
+                <div key={exp.id} className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-stone-100">{exp.vendor}</div>
+                      <div className="text-[11px] text-stone-400">{exp.description}</div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteExpense(exp.id, exp.vendor)}
+                      className="p-1 text-stone-500 hover:text-red-400 shrink-0"
+                      title="Delete expense entry"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-stone-800/80">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-stone-800 text-amber-300 border border-stone-700">
+                      {exp.category}
+                    </span>
+                    <span className="font-bold text-amber-400 font-mono text-sm">
+                      UGX {exp.amount.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-stone-500 font-mono pt-1">
+                    <span>{exp.date}</span>
+                    {exp.receiptReference && <span>Ref: {exp.receiptReference}</span>}
+                    {exp.recurring && <span className="text-emerald-400">Recurring</span>}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-6 text-center text-stone-500 bg-stone-900 rounded-xl border border-stone-800 text-xs">
+                No expenses logged for this category filter.
+              </div>
+            )}
+          </div>
+
+          {/* Expenses Desktop Table (>= md screens) */}
+          <div className="hidden md:block bg-stone-900 border border-stone-800 rounded-xl p-5 space-y-4">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -706,7 +748,68 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ state })
               <span className="text-xs text-stone-400 font-mono">{customers.length} total organizations</span>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Cards (< md screens) */}
+            <div className="block md:hidden space-y-3">
+              {customers.map(c => (
+                <div key={c.id} className="p-4 bg-stone-950/70 border border-stone-800 rounded-xl space-y-3 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-stone-100">{c.legalName}</div>
+                      <div className="text-[10px] text-stone-400 font-mono">{c.registrationNumber} • {c.district}, {c.country}</div>
+                      <div className="text-[10px] text-stone-500">{c.email}</div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
+                      c.activeStatus === 'Active' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                      c.activeStatus === 'Trial' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                      'bg-red-950 text-red-300 border border-red-800'
+                    }`}>
+                      {c.activeStatus}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-stone-800">
+                    <div>
+                      <span className="text-[10px] text-stone-500 block">Subscription</span>
+                      <span className="font-semibold text-emerald-400">{c.subscription?.planName || c.subscriptionPlan || 'Starter'}</span>
+                      {c.subscription && (
+                        <span className="text-[10px] text-stone-400 block font-mono">
+                          UGX {c.subscription.amountUgx.toLocaleString()}/{c.subscription.billingCycle}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-500 block">Lifetime Revenue</span>
+                      <span className="font-mono font-bold text-stone-100">UGX {c.totalPaymentsUgx.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-stone-800 text-[11px]">
+                    <span className="font-mono text-stone-400">
+                      {c.farmersCount} Farmers • {c.farmsCount} Farms
+                    </span>
+
+                    {c.activeStatus === 'Active' ? (
+                      <button
+                        onClick={() => handleUpdateOrgStatus(c.id, c.legalName, 'Suspended')}
+                        className="px-2.5 py-1 bg-red-950 hover:bg-red-900 text-red-300 text-[10px] font-bold rounded border border-red-800 transition-colors"
+                      >
+                        Suspend
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleUpdateOrgStatus(c.id, c.legalName, 'Active')}
+                        className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[10px] font-bold rounded border border-emerald-800 transition-colors"
+                      >
+                        Activate
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (>= md screens) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-800 text-stone-400 font-semibold bg-stone-950/40">
@@ -912,7 +1015,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ state })
             </div>
 
             <form onSubmit={handleCreateExpense} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-400 font-semibold mb-1">Expense Amount (UGX) *</label>
                   <input
@@ -939,7 +1042,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ state })
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-400 font-semibold mb-1">Category *</label>
                   <select
@@ -983,7 +1086,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ state })
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-400 font-semibold mb-1">Receipt / Invoice Ref</label>
                   <input
@@ -995,7 +1098,7 @@ export const OwnerDashboardView: React.FC<OwnerDashboardViewProps> = ({ state })
                   />
                 </div>
 
-                <div className="flex items-center pt-6">
+                <div className="flex items-center pt-2 sm:pt-6">
                   <label className="flex items-center gap-2 cursor-pointer text-stone-300">
                     <input
                       type="checkbox"

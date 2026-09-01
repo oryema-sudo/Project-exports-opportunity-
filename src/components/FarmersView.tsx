@@ -206,33 +206,35 @@ export const FarmersView: React.FC<FarmersViewProps> = ({
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <span className="font-bold text-stone-500 uppercase tracking-wider text-[10px] flex items-center gap-1">
             <Filter className="w-3 h-3 text-stone-400" /> Filter:
           </span>
 
-          <select
-            value={filterDistrict}
-            onChange={(e) => setFilterDistrict(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Districts ({farmers.length})</option>
-            {UGANDA_DISTRICTS.map(d => (
-              <option key={d.name} value={d.name}>{d.name} ({d.coffeeType})</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterDistrict}
+              onChange={(e) => setFilterDistrict(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Districts ({farmers.length})</option>
+              {UGANDA_DISTRICTS.map(d => (
+                <option key={d.name} value={d.name}>{d.name} ({d.coffeeType})</option>
+              ))}
+            </select>
 
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Verification Statuses</option>
-            <option value="Verified">Verified</option>
-            <option value="Pending Verification">Pending Verification</option>
-            <option value="Needs Review">Needs Review</option>
-          </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Verification Statuses</option>
+              <option value="Verified">Verified</option>
+              <option value="Pending Verification">Pending Verification</option>
+              <option value="Needs Review">Needs Review</option>
+            </select>
+          </div>
         </div>
 
         <div className="text-stone-500 font-mono text-xs">
@@ -240,8 +242,79 @@ export const FarmersView: React.FC<FarmersViewProps> = ({
         </div>
       </div>
 
-      {/* Farmers Table */}
-      <div className="bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
+      {/* Mobile Farmer Cards View (< md screens) */}
+      <div className="block md:hidden space-y-3">
+        {filteredFarmers.map(farmer => {
+          const farmerFarms = farms.filter(f => f.farmerId === farmer.id);
+          const hasPolygons = farmerFarms.some(f => f.geometryType === 'Polygon');
+
+          return (
+            <div
+              key={farmer.id}
+              onClick={() => setSelectedFarmer(farmer)}
+              className="bg-white border border-stone-200 rounded-lg p-4 shadow-sm space-y-3 cursor-pointer hover:border-emerald-500 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-bold text-sm text-stone-900">{farmer.fullName}</div>
+                  <div className="text-[10px] text-stone-500 font-mono">{farmer.farmerRegId || farmer.id}</div>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
+                  farmer.verificationStatus === 'Verified' ? 'bg-emerald-100 text-emerald-800' :
+                  farmer.verificationStatus === 'Needs Review' ? 'bg-red-100 text-red-800' :
+                  'bg-amber-100 text-amber-800'
+                }`}>
+                  {farmer.verificationStatus}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs text-stone-600 pt-1 border-t border-stone-100">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Location</span>
+                  <span>{farmer.district}, {farmer.village}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">NIN</span>
+                  <span className="font-mono text-stone-800">{farmer.nationalId || 'Pending NIN'}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
+                <div className="text-[11px] text-stone-500">
+                  <span className="font-bold text-stone-800">{farmerFarms.length} plot(s)</span>
+                  <span className="ml-1 text-emerald-700">{hasPolygons ? '• Polygons' : '• Point GPS'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedFarmer(farmer);
+                    }}
+                    className="text-emerald-800 font-bold text-xs hover:underline"
+                  >
+                    Profile
+                  </button>
+                  {currentUser.role !== 'viewer' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditFarmerModal(farmer);
+                      }}
+                      className="p-1 text-stone-400 hover:text-stone-700"
+                      title="Edit Farmer Record"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop Farmers Table (>= md screens) */}
+      <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>

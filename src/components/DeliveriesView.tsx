@@ -201,8 +201,70 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
         </div>
       </div>
 
-      {/* Deliveries Table */}
-      <div className="bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
+      {/* Deliveries Mobile Cards (< md screens) */}
+      <div className="block md:hidden space-y-3">
+        {filteredDeliveries.length === 0 ? (
+          <div className="py-8 text-center text-stone-500 bg-white border border-stone-200 rounded-lg p-6">
+            <AlertCircle className="w-6 h-6 mx-auto text-stone-400 mb-2" />
+            <p className="font-semibold text-xs">No smallholder purchase receipts found</p>
+            <p className="text-[11px] text-stone-400 mt-1">Record a farmer purchase or import delivery tickets to populate this intake ledger.</p>
+          </div>
+        ) : (
+          filteredDeliveries.map(del => {
+            const farmer = farmers.find(f => f.id === del.farmerId);
+            const farm = farms.find(f => f.id === del.farmId);
+            const linkedLot = lots.find(l => l.id === del.associatedLotId);
+
+            const qty = Number(del.quantityKg) || 0;
+            const bags = del.numberOfBags || Math.ceil(qty / 60);
+            const totalUgx = Number(del.totalPaymentUgx) || (qty * (Number(del.pricePerKgUgx) || 7200));
+
+            return (
+              <div key={del.id} className="p-4 bg-white border border-stone-200 rounded-lg shadow-sm space-y-2 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-bold text-stone-900 font-mono block">{del.receiptNumber || (del as any).deliveryRef || 'REC-N/A'}</span>
+                    <span className="text-[10px] text-stone-400">{del.deliveryDate || del.dateReceived || '—'}</span>
+                  </div>
+                  {linkedLot ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                      Lot: {linkedLot.lotNumber}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0">
+                      Unassigned
+                    </span>
+                  )}
+                </div>
+
+                <div className="pt-1 border-t border-stone-100">
+                  <div className="font-bold text-stone-900">{farmer?.fullName || 'Unknown Smallholder'}</div>
+                  <div className="text-[10px] text-stone-500 font-mono">{farm?.farmName || 'Primary Parcel'} • {farm?.district || 'Uganda'}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-stone-100">
+                  <div>
+                    <span className="text-[10px] text-stone-400 uppercase font-bold block">Quantity</span>
+                    <span className="font-mono font-bold text-stone-900">{qty.toLocaleString()} kg</span>
+                    <span className="text-[10px] text-stone-500 ml-1">({bags} bags)</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-stone-400 uppercase font-bold block">Payment</span>
+                    <span className="font-mono font-bold text-stone-800">UGX {totalUgx.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-stone-500 pt-1 border-t border-stone-100">
+                  {del.coffeeType} - {del.grade} • Moisture: {del.moistureContentPercent || 13.0}%
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Deliveries Desktop Table (>= md screens) */}
+      <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
@@ -367,7 +429,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Variety</label>
                   <select
@@ -396,7 +458,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Net Weight (Kg)</label>
                   <input
@@ -430,7 +492,7 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Unit Price (UGX / Kg)</label>
                   <input

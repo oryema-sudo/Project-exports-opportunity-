@@ -1,6 +1,6 @@
 {
-  "name": "Uganda Coffee Traceability & Export Readiness",
-  "description": "Supply-chain traceability, farm-level geolocation, lot tracking, and export readiness operating system for Ugandan coffee exporters and cooperatives.",
+  "name": "ASTROKAHAWA",
+  "description": "ASTROKAHAWA is a digital traceability and export-readiness platform for coffee exporters, connecting farm-level origin data, coffee lots, shipments, documentation and evidence in one system.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -20,12 +20,19 @@ import {
   LogOut,
   User as UserIcon,
   ChevronDown,
-  LogIn
+  LogIn,
+  Menu,
+  X,
+  SlidersHorizontal,
+  Home,
+  Info
 } from 'lucide-react';
 import { AppState, appStore } from '../services/store';
 import { UserRole } from '../types';
+import { AstroKahawaLogo, AstroKahawaIcon } from './AstroKahawaLogo';
 
 export type ActiveTab = 
+  | 'home'
   | 'dashboard' 
   | 'shipments' 
   | 'lots' 
@@ -50,6 +57,7 @@ interface NavigationProps {
   onSelectOrg: (orgId: string) => void;
   onRoleChange: (role: UserRole) => void;
   onResetData: () => void;
+  onOpenAuth?: (mode?: 'login' | 'signup' | 'about') => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -65,10 +73,13 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenOrgSettings,
   onSelectOrg,
   onRoleChange,
-  onResetData
+  onResetData,
+  onOpenAuth
 }) => {
   const activeOrg = state.organizations.find(o => o.id === state.activeOrgId) || state.organizations[0];
   const [showAccountMenu, setShowAccountMenu] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [showDevControls, setShowDevControls] = useState<boolean>(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
 
   // Close account menu when clicking outside
@@ -82,6 +93,12 @@ export const Navigation: React.FC<NavigationProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Close mobile menu on tab change
+  const handleSelectTab = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+  };
+
   // Count active warnings and blockers
   const blockedShipments = state.shipments.filter(s => s.readinessStatus === 'RED').length;
   const reviewShipments = state.shipments.filter(s => s.readinessStatus === 'YELLOW').length;
@@ -89,42 +106,42 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <header className="bg-stone-900 text-stone-100 border-b border-stone-800 sticky top-0 z-30 shadow-md">
       {/* Top Banner: Regulatory Positioning & Disclaimer */}
-      <div className="bg-emerald-950 text-emerald-300 text-xs px-4 py-1.5 flex flex-wrap items-center justify-between border-b border-emerald-900/60 font-mono">
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="font-semibold text-emerald-200">UGANDA COFFEE TRACEABILITY OS</span>
-          <span className="text-emerald-400/60">|</span>
-          <span className="text-emerald-300/80">Export Readiness & Supply-Chain Due-Diligence System</span>
+      <div className="bg-emerald-950 text-emerald-300 text-[11px] sm:text-xs px-3 sm:px-4 py-1.5 flex flex-wrap items-center justify-between border-b border-emerald-900/60 font-mono gap-1">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+          <span className="font-semibold text-emerald-200">ASTROKAHAWA TRACEABILITY OS</span>
+          <span className="hidden sm:inline text-emerald-400/60">|</span>
+          <span className="hidden sm:inline text-emerald-300/80">From origin to export, with evidence.</span>
         </div>
-        <div className="text-[11px] text-emerald-400/90 flex items-center gap-2">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Evidence Organizer & Readiness Engine (UCDA / Supply Chain Layer)</span>
+        <div className="text-[10px] sm:text-[11px] text-emerald-400/90 flex items-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="truncate max-w-[220px] sm:max-w-none">UCDA & Due-Diligence Evidence Layer</span>
         </div>
       </div>
 
       {/* Main Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-4">
           
           {/* Logo & Org Switcher */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
             <button 
-              onClick={() => setActiveTab('dashboard')}
-              className="flex items-center gap-2.5 text-left focus:outline-none group"
+              onClick={() => handleSelectTab('dashboard')}
+              className="flex items-center text-left focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-lg p-0.5"
+              aria-label="ASTROKAHAWA Dashboard"
             >
-              <div className="w-10 h-10 rounded-lg bg-emerald-700 flex items-center justify-center text-white font-black text-lg shadow-inner group-hover:bg-emerald-600 transition-colors">
-                ☕
-              </div>
+              {/* Desktop / Tablet Logo */}
               <div className="hidden sm:block">
-                <div className="font-bold text-stone-100 tracking-tight text-base leading-tight">
-                  KaziTrace <span className="text-emerald-400 font-semibold text-xs px-1.5 py-0.5 bg-emerald-900/80 rounded border border-emerald-700/50">Uganda</span>
-                </div>
-                <div className="text-[11px] text-stone-400 font-medium">Export Due-Diligence OS</div>
+                <AstroKahawaLogo size="md" variant="dark" showTagline={true} />
+              </div>
+              {/* Compact Mobile Logo (<= 640px) */}
+              <div className="block sm:hidden">
+                <AstroKahawaLogo size="sm" variant="dark" showTagline={false} />
               </div>
             </button>
 
-            {/* Tenant Selector */}
-            <div className="relative pl-3 border-l border-stone-700">
+            {/* Tenant Selector (Desktop) */}
+            <div className="hidden md:block relative pl-3 border-l border-stone-700">
               <div className="flex items-center gap-1.5 text-xs text-stone-400 mb-0.5">
                 <Building2 className="w-3 h-3 text-emerald-400" />
                 <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400">Workspace</span>
@@ -132,7 +149,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               <select
                 value={state.activeOrgId}
                 onChange={(e) => onSelectOrg(e.target.value)}
-                className="bg-stone-800 border border-stone-700 text-stone-100 text-xs font-semibold rounded px-2.5 py-1 focus:ring-1 focus:ring-emerald-500 focus:outline-none cursor-pointer max-w-[200px] truncate"
+                className="bg-stone-800 border border-stone-700 text-stone-100 text-xs font-semibold rounded px-2 py-1 focus:ring-1 focus:ring-emerald-500 focus:outline-none cursor-pointer max-w-[170px] lg:max-w-[220px] truncate"
               >
                 {state.organizations.map(org => (
                   <option key={org.id} value={org.id}>
@@ -143,8 +160,8 @@ export const Navigation: React.FC<NavigationProps> = ({
             </div>
           </div>
 
-          {/* Quick Search */}
-          <div className="hidden md:flex flex-1 max-w-xs relative">
+          {/* Quick Search (Desktop) */}
+          <div className="hidden md:flex flex-1 max-w-xs lg:max-w-sm relative">
             <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
             <input
               type="text"
@@ -155,11 +172,11 @@ export const Navigation: React.FC<NavigationProps> = ({
             />
           </div>
 
-          {/* Actions & Role Switcher */}
-          <div className="flex items-center gap-2.5">
-            {/* Quick Action Button Group */}
+          {/* Actions & Controls (Desktop & Mobile trigger) */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
+            {/* Quick Action Button Group (Desktop) */}
             {state.currentUser.role !== 'viewer' && (
-              <div className="flex items-center gap-1.5">
+              <div className="hidden sm:flex items-center gap-1.5">
                 <button
                   onClick={onOpenBulkImport}
                   className="bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white text-xs font-medium px-2.5 py-1.5 rounded border border-stone-700 flex items-center gap-1.5 transition-colors"
@@ -171,16 +188,16 @@ export const Navigation: React.FC<NavigationProps> = ({
 
                 <button
                   onClick={onOpenNewShipment}
-                  className="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 transition-colors"
+                  className="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold px-2.5 sm:px-3 py-1.5 rounded shadow-sm flex items-center gap-1.5 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">New Consignment</span>
+                  <span className="hidden md:inline">New Consignment</span>
                 </button>
               </div>
             )}
 
-            {/* Cloud Database & Auth Status */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-stone-800/90 border border-stone-700 text-xs">
+            {/* Cloud Database Status */}
+            <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded bg-stone-800/90 border border-stone-700 text-xs">
               <div className={`w-2 h-2 rounded-full ${state.serverConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
               <span className="text-[11px] text-stone-300 font-mono">
                 {state.serverConnected ? 'PostgreSQL Active' : 'Connecting DB...'}
@@ -193,14 +210,14 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setShowAccountMenu(!showAccountMenu)}
-                    className="flex items-center gap-2 px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded border border-stone-700 text-xs font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                    className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded border border-stone-700 text-xs font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer min-h-[36px]"
                     title="View Account Details & Security"
                   >
                     <div className="w-5 h-5 rounded-full bg-emerald-700 flex items-center justify-center text-[10px] font-bold text-white uppercase">
                       {state.currentUser.name ? state.currentUser.name.charAt(0) : 'U'}
                     </div>
                     <div className="hidden lg:block text-left leading-tight">
-                      <div className="text-xs font-semibold text-stone-200">{state.currentUser.name}</div>
+                      <div className="text-xs font-semibold text-stone-200 truncate max-w-[120px]">{state.currentUser.name}</div>
                     </div>
                     <ChevronDown className="w-3 h-3 text-stone-400" />
                   </button>
@@ -225,23 +242,45 @@ export const Navigation: React.FC<NavigationProps> = ({
 
                       <div className="py-1">
                         <button
-                          onClick={async () => {
+                          onClick={() => {
                             setShowAccountMenu(false);
-                            await appStore.loginWithGoogle();
+                            onOpenAuth?.('login');
                           }}
                           className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:text-white hover:bg-stone-800 flex items-center gap-2 transition-colors cursor-pointer"
                         >
                           <LogIn className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Switch Google Account</span>
+                          <span>Switch Account / Sign In</span>
                         </button>
+
+                        <button
+                          onClick={() => {
+                            setShowAccountMenu(false);
+                            onOpenAuth?.('signup');
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:text-white hover:bg-stone-800 flex items-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Create New Workspace</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowAccountMenu(false);
+                            onOpenAuth?.('about');
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-stone-300 hover:text-white hover:bg-stone-800 flex items-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <Info className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>About ASTROKAHAWA</span>
+                        </button>
+
+                        <div className="border-t border-stone-800 my-1"></div>
 
                         <button
                           onClick={async () => {
                             setShowAccountMenu(false);
                             await appStore.logout();
-                            if (activeTab === 'owner') {
-                              setActiveTab('dashboard');
-                            }
+                            setActiveTab('home');
                           }}
                           className="w-full text-left px-3 py-1.5 text-xs text-red-300 hover:text-red-200 hover:bg-red-950/40 flex items-center gap-2 transition-colors cursor-pointer"
                         >
@@ -254,8 +293,8 @@ export const Navigation: React.FC<NavigationProps> = ({
                 </div>
               ) : (
                 <button
-                  onClick={() => appStore.loginWithGoogle()}
-                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                  onClick={() => onOpenAuth ? onOpenAuth('login') : appStore.loginWithGoogle()}
+                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer min-h-[36px]"
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   <span>Sign In</span>
@@ -263,8 +302,8 @@ export const Navigation: React.FC<NavigationProps> = ({
               )}
             </div>
 
-            {/* Role Switcher Pill (for testing Admin vs Staff vs Viewer permissions) */}
-            <div className="bg-stone-800 border border-stone-700 rounded px-2 py-1 flex items-center gap-1.5 text-xs">
+            {/* Role Switcher Pill (Desktop) */}
+            <div className="hidden lg:flex bg-stone-800 border border-stone-700 rounded px-2 py-1 items-center gap-1.5 text-xs">
               <span className="text-[10px] text-stone-400 font-bold uppercase">Role:</span>
               <select
                 value={state.currentUser.role}
@@ -277,10 +316,10 @@ export const Navigation: React.FC<NavigationProps> = ({
               </select>
             </div>
 
-            {/* Org Settings / Reset */}
+            {/* Org Settings / Reset (Desktop) */}
             <button
               onClick={onOpenOrgSettings}
-              className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded transition-colors"
+              className="hidden sm:inline-flex p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded transition-colors min-h-[36px] min-w-[36px] items-center justify-center"
               title="Organization Profile & Settings"
             >
               <Building2 className="w-4 h-4" />
@@ -288,42 +327,180 @@ export const Navigation: React.FC<NavigationProps> = ({
 
             <button
               onClick={onResetData}
-              className="p-1.5 text-stone-400 hover:text-amber-300 hover:bg-stone-800 rounded transition-colors"
+              className="hidden lg:inline-flex p-1.5 text-stone-400 hover:text-amber-300 hover:bg-stone-800 rounded transition-colors min-h-[36px] min-w-[36px] items-center justify-center"
               title="Reset to Verified Uganda Seed Dataset"
             >
               <RefreshCw className="w-4 h-4" />
+            </button>
+
+            {/* Mobile Hamburger Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 text-stone-300 hover:text-white hover:bg-stone-800 rounded-lg transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
+              aria-label="Toggle navigation menu"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
 
         </div>
       </div>
 
-      {/* Navigation Sub-Tabs */}
-      <div className="bg-stone-950 border-t border-stone-800 px-4 sm:px-6 lg:px-8 overflow-x-auto scrollbar-none">
-        <div className="max-w-7xl mx-auto flex space-x-1 py-1">
+      {/* Mobile Drawer / Dropdown Panel */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-stone-900 border-b border-stone-800 px-4 py-4 space-y-4 shadow-2xl animate-in slide-in-from-top-2 duration-150">
+          
+          {/* Mobile Search */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search farmer, lot, farm, shipment..."
+              className="w-full bg-stone-800 text-stone-100 text-xs pl-9 pr-3 py-2 rounded-md border border-stone-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 placeholder-stone-500"
+            />
+          </div>
+
+          {/* Mobile Workspace Selector & Org Settings */}
+          <div className="bg-stone-800/80 p-3 rounded-lg border border-stone-700/80 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                Active Workspace
+              </span>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenOrgSettings();
+                }}
+                className="text-xs text-emerald-400 font-semibold hover:underline flex items-center gap-1"
+              >
+                Settings & Team
+              </button>
+            </div>
+            <select
+              value={state.activeOrgId}
+              onChange={(e) => onSelectOrg(e.target.value)}
+              className="w-full bg-stone-900 border border-stone-700 text-stone-100 text-xs font-semibold rounded px-2.5 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            >
+              {state.organizations.map(org => (
+                <option key={org.id} value={org.id}>
+                  {org.legalName} ({org.type})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Quick Actions on Mobile */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenNewShipment();
+              }}
+              className="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold py-2.5 px-3 rounded flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Consignment</span>
+            </button>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenBulkImport();
+              }}
+              className="bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold py-2.5 px-3 rounded border border-stone-700 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span>Bulk CSV Import</span>
+            </button>
+          </div>
+
+          {/* Developer & Role Switcher Collapsible */}
+          <div className="border-t border-stone-800 pt-3">
+            <button
+              onClick={() => setShowDevControls(!showDevControls)}
+              className="w-full flex items-center justify-between text-xs text-stone-400 hover:text-stone-200 py-1"
+            >
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-stone-400" />
+                Testing & Role Permissions
+              </span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${showDevControls ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showDevControls && (
+              <div className="mt-2 p-3 bg-stone-950 rounded border border-stone-800 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-stone-400 font-semibold">Simulate User Role:</span>
+                  <select
+                    value={state.currentUser.role}
+                    onChange={(e) => onRoleChange(e.target.value as UserRole)}
+                    className="bg-stone-800 text-emerald-300 font-bold text-xs border border-stone-700 rounded px-2 py-1 focus:outline-none"
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="staff">Staff</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-stone-800 text-xs">
+                  <span className="text-stone-400 font-medium">Database Seed State:</span>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onResetData();
+                    }}
+                    className="text-amber-400 hover:text-amber-300 font-semibold text-xs flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Reset Data
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* Navigation Sub-Tabs Bar */}
+      <div className="bg-stone-950 border-t border-stone-800 px-2 sm:px-6 lg:px-8 overflow-x-auto scrollbar-none">
+        <div className="max-w-7xl mx-auto flex space-x-1 sm:space-x-1.5 py-1.5">
           
           <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors ${
+            onClick={() => handleSelectTab('home')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
+              activeTab === 'home'
+                ? 'bg-emerald-800 text-white shadow-sm'
+                : 'text-stone-300 hover:bg-stone-800 hover:text-white'
+            }`}
+          >
+            <Home className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Home</span>
+          </button>
+
+          <button
+            onClick={() => handleSelectTab('dashboard')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
               activeTab === 'dashboard'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <Layers className="w-3.5 h-3.5 text-emerald-400" />
-            Dashboard
+            <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Dashboard</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('shipments')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors relative ${
+            onClick={() => handleSelectTab('shipments')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors relative min-h-[38px] ${
               activeTab === 'shipments'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <Truck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Shipments & Export Readiness</span>
+            <Truck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Shipments & Readiness</span>
             {(blockedShipments > 0 || reviewShipments > 0) && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-stone-950">
                 {blockedShipments + reviewShipments}
@@ -332,88 +509,88 @@ export const Navigation: React.FC<NavigationProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('lots')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors ${
+            onClick={() => handleSelectTab('lots')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
               activeTab === 'lots'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <Scale className="w-3.5 h-3.5 text-emerald-400" />
+            <Scale className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>Lots & Traceability</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('deliveries')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors ${
+            onClick={() => handleSelectTab('deliveries')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
               activeTab === 'deliveries'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <History className="w-3.5 h-3.5 text-emerald-400" />
+            <History className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>Purchases & Intake</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('farmers')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors ${
+            onClick={() => handleSelectTab('farmers')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
               activeTab === 'farmers'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-emerald-400" />
+            <Users className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>Farmers Directory</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('map')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors ${
+            onClick={() => handleSelectTab('map')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
               activeTab === 'map'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <Compass className="w-3.5 h-3.5 text-emerald-400" />
+            <Compass className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>Farm GPS & Map</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('documents')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors ${
+            onClick={() => handleSelectTab('documents')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
               activeTab === 'documents'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <FileText className="w-3.5 h-3.5 text-emerald-400" />
+            <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>Document Evidence</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('audit')}
-            className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-colors ${
+            onClick={() => handleSelectTab('audit')}
+            className={`px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-colors min-h-[38px] ${
               activeTab === 'audit'
                 ? 'bg-emerald-800 text-white shadow-sm'
                 : 'text-stone-300 hover:bg-stone-800 hover:text-white'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>Audit Trail</span>
           </button>
 
           {/* CEO & Platform Owner Governance Tab (Exclusive to PLATFORM_OWNER) */}
           {(state.currentUser.isPlatformOwner || state.currentUser.platformRole === 'PLATFORM_OWNER') && (
             <button
-              onClick={() => setActiveTab('owner')}
-              className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all border ${
+              onClick={() => handleSelectTab('owner')}
+              className={`px-3 py-2 rounded-md text-xs font-bold flex items-center gap-1.5 sm:gap-2 whitespace-nowrap transition-all border min-h-[38px] ${
                 activeTab === 'owner'
                   ? 'bg-amber-500 text-stone-950 border-amber-400 shadow-md ring-2 ring-amber-400/40'
                   : 'bg-stone-800/80 text-amber-300 border-amber-500/30 hover:bg-stone-800 hover:border-amber-400/60'
               }`}
             >
-              <Crown className={`w-3.5 h-3.5 ${activeTab === 'owner' ? 'text-stone-950' : 'text-amber-400'}`} />
+              <Crown className={`w-3.5 h-3.5 ${activeTab === 'owner' ? 'text-stone-950' : 'text-amber-400'} shrink-0`} />
               <span>CEO Platform Governance</span>
               <span className={`px-1.5 py-0.2 text-[9px] font-black uppercase rounded ${
                 activeTab === 'owner' ? 'bg-stone-950 text-amber-400' : 'bg-amber-500/20 text-amber-300'
@@ -428,3 +605,4 @@ export const Navigation: React.FC<NavigationProps> = ({
     </header>
   );
 };
+

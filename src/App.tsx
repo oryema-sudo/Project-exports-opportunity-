@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { appStore, AppState } from './services/store';
 import { UserRole } from './types';
 import { Navigation, ActiveTab } from './components/Navigation';
+import { HomePage } from './components/HomePage';
+import { AuthModal } from './components/AuthModal';
 import { Dashboard } from './components/Dashboard';
 import { ShipmentsView } from './components/ShipmentsView';
 import { ShipmentDetailView } from './components/ShipmentDetailView';
@@ -15,6 +17,7 @@ import { OwnerDashboardView } from './components/OwnerDashboardView';
 import { EvidencePackModal } from './components/EvidencePackModal';
 import { BulkImportModal } from './components/BulkImportModal';
 import { OrganizationModal } from './components/OrganizationModal';
+import { AstroKahawaIcon } from './components/AstroKahawaLogo';
 import { ShieldCheck, Info } from 'lucide-react';
 
 export default function App() {
@@ -22,23 +25,29 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      if (tabParam && ['dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(tabParam)) {
+      if (tabParam && ['home', 'dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(tabParam)) {
         return tabParam as ActiveTab;
       }
       const hash = window.location.hash.replace('#', '');
-      if (hash && ['dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(hash)) {
+      if (hash && ['home', 'dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(hash)) {
         return hash as ActiveTab;
       }
     } catch {
       // ignore
     }
-    return 'dashboard';
+    return 'home';
   };
 
   const [state, setState] = useState<AppState>(appStore.getState());
   const [activeTab, setActiveTabState] = useState<ActiveTab>(getInitialTab);
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Auth Modal state
+  const [authModal, setAuthModal] = useState<{ isOpen: boolean; mode: 'login' | 'signup' | 'about' }>({
+    isOpen: false,
+    mode: 'login'
+  });
 
   const setActiveTab = (tab: ActiveTab) => {
     setActiveTabState(tab);
@@ -112,8 +121,30 @@ export default function App() {
     }
   };
 
+  const handleOpenAuthModal = (mode: 'login' | 'signup' | 'about' = 'login') => {
+    setAuthModal({ isOpen: true, mode });
+  };
+
   const selectedShipment = state.shipments.find(s => s.id === selectedShipmentId);
   const selectedShipmentScorecard = selectedShipmentId ? appStore.getShipmentScorecard(selectedShipmentId) : null;
+
+  // If in 'home' tab, render dedicated HomePage
+  if (activeTab === 'home') {
+    return (
+      <>
+        <HomePage 
+          onEnterApp={() => setActiveTab('dashboard')} 
+        />
+        {/* Modals available globally */}
+        <AuthModal
+          isOpen={authModal.isOpen}
+          onClose={() => setAuthModal(prev => ({ ...prev, isOpen: false }))}
+          initialMode={authModal.mode}
+          onSuccess={() => setActiveTab('dashboard')}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans selection:bg-emerald-200 selection:text-emerald-900">
@@ -141,6 +172,7 @@ export default function App() {
         onSelectOrg={handleOrgChange}
         onRoleChange={handleRoleChange}
         onResetData={handleResetData}
+        onOpenAuth={handleOpenAuthModal}
       />
 
       {/* Main Content Area */}
@@ -234,13 +266,27 @@ export default function App() {
       <footer className="bg-stone-900 border-t border-stone-800 text-stone-400 text-xs py-4 px-4 sm:px-6 lg:px-8 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <AstroKahawaIcon size={20} showBackground={false} />
             <span className="text-[11px] text-stone-300">
-              <strong>KaziTrace Uganda Coffee OS:</strong> Supply-chain due-diligence data organization and export readiness calculation layer.
+              <strong className="text-stone-100 uppercase tracking-tight">ASTROKAHAWA:</strong> From origin to export, with evidence.
             </span>
           </div>
-          <div className="text-[10px] text-stone-500 font-mono">
-            System Evidence Layer • Standard WGS84 GeoJSON Export • UCDA Workflow Compliant
+          <div className="flex items-center gap-3 text-[10px] text-stone-500 font-mono">
+            <button 
+              onClick={() => setActiveTab('home')} 
+              className="text-emerald-400 hover:underline cursor-pointer"
+            >
+              Public Home Page
+            </button>
+            <span>•</span>
+            <button 
+              onClick={() => handleOpenAuthModal('about')} 
+              className="text-stone-400 hover:text-stone-200 cursor-pointer"
+            >
+              About Us
+            </button>
+            <span>•</span>
+            <span>UCDA Workflow Compliant</span>
           </div>
         </div>
       </footer>
@@ -267,6 +313,14 @@ export default function App() {
           onClose={() => setEvidencePackShipmentId(null)}
         />
       )}
+
+      {/* Auth Modal for Log In, Sign Up, About Us */}
+      <AuthModal
+        isOpen={authModal.isOpen}
+        onClose={() => setAuthModal(prev => ({ ...prev, isOpen: false }))}
+        initialMode={authModal.mode}
+        onSuccess={() => setActiveTab('dashboard')}
+      />
 
     </div>
   );

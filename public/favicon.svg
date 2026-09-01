@@ -1,0 +1,40 @@
+<svg width="64" height="64" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ak-bean-grad" x1="20" y1="20" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#064E3B" />
+    </linearGradient>
+    <linearGradient id="ak-emerald-grad" x1="15" y1="15" x2="85" y2="85" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="50%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="ak-orbit-grad" x1="10" y1="90" x2="90" y2="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.3" />
+      <stop offset="50%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#34D399" />
+    </linearGradient>
+  </defs>
+
+  <rect width="100" height="100" rx="22" fill="#0C1310" />
+
+  <g transform="translate(4, 4) scale(0.92)">
+    <!-- Orbital trajectory -->
+    <path d="M 16 76 C 8 50, 24 18, 56 12 C 78 8, 92 24, 88 44 C 85 58, 72 74, 52 82 C 38 88, 22 84, 16 76" fill="none" stroke="url(#ak-orbit-grad)" stroke-width="4" stroke-linecap="round" />
+
+    <!-- Left bean lobe with geolocation contour -->
+    <path d="M 48 20 C 32 20, 22 34, 23 50 C 24 64, 34 76, 48 80 C 47 70, 43 58, 38 48 C 34 40, 36 30, 48 20 Z" fill="url(#ak-bean-grad)" />
+
+    <!-- Right bean lobe with export trajectory -->
+    <path d="M 52 20 C 64 20, 77 32, 77 48 C 77 64, 66 78, 52 80 C 53 70, 57 58, 62 48 C 66 40, 64 30, 52 20 Z" fill="url(#ak-emerald-grad)" />
+
+    <!-- Crease meridian -->
+    <path d="M 50 19 Q 36 48 50 50 Q 64 52 50 81" fill="none" stroke="#0C1310" stroke-width="4.5" stroke-linecap="round" />
+
+    <!-- Origin GPS point -->
+    <circle cx="50" cy="50" r="4.5" fill="#F59E0B" stroke="#0C1310" stroke-width="2" />
+
+    <!-- Orbital node -->
+    <circle cx="84" cy="28" r="4.5" fill="#34D399" />
+  </g>
+</svg>

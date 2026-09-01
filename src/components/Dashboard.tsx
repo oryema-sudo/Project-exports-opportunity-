@@ -19,6 +19,7 @@ import {
 import { AppState } from '../services/store';
 import { ActiveTab } from './Navigation';
 import { isUgandaCoordinates } from '../data/ugandaRegions';
+import { AstroKahawaIcon } from './AstroKahawaLogo';
 
 interface DashboardProps {
   state: AppState;
@@ -98,8 +99,72 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
+      {/* ASTROKAHAWA Traceability Story: Origin -> Lot -> Shipment -> Evidence */}
+      <div className="bg-stone-900 text-stone-100 rounded-lg p-3 sm:p-4 border border-stone-800 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <AstroKahawaIcon size={24} showBackground={false} />
+            <div>
+              <div className="text-xs font-black uppercase tracking-wider text-emerald-400 font-mono">
+                Traceability Workflow Pipeline
+              </div>
+              <div className="text-[11px] text-stone-300">
+                End-to-end evidence custody chain from smallholder coffee plot to export port.
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Steps */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <button
+              onClick={() => setActiveTab('farmers')}
+              className="flex items-center gap-1.5 p-2 rounded bg-stone-800/90 hover:bg-emerald-950 border border-stone-700/80 hover:border-emerald-700 text-left transition-colors group"
+            >
+              <div className="w-5 h-5 rounded-full bg-emerald-900/80 text-emerald-300 flex items-center justify-center font-mono font-bold text-[10px] shrink-0">1</div>
+              <div className="min-w-0">
+                <div className="font-bold text-stone-100 group-hover:text-emerald-300 truncate">Origin</div>
+                <div className="text-[10px] text-stone-400 truncate">{totalFarmers} GPS plots</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('lots')}
+              className="flex items-center gap-1.5 p-2 rounded bg-stone-800/90 hover:bg-emerald-950 border border-stone-700/80 hover:border-emerald-700 text-left transition-colors group"
+            >
+              <div className="w-5 h-5 rounded-full bg-emerald-900/80 text-emerald-300 flex items-center justify-center font-mono font-bold text-[10px] shrink-0">2</div>
+              <div className="min-w-0">
+                <div className="font-bold text-stone-100 group-hover:text-emerald-300 truncate">Lot</div>
+                <div className="text-[10px] text-stone-400 truncate">{totalLots} batches</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('shipments')}
+              className="flex items-center gap-1.5 p-2 rounded bg-stone-800/90 hover:bg-emerald-950 border border-stone-700/80 hover:border-emerald-700 text-left transition-colors group"
+            >
+              <div className="w-5 h-5 rounded-full bg-emerald-900/80 text-emerald-300 flex items-center justify-center font-mono font-bold text-[10px] shrink-0">3</div>
+              <div className="min-w-0">
+                <div className="font-bold text-stone-100 group-hover:text-emerald-300 truncate">Shipment</div>
+                <div className="text-[10px] text-stone-400 truncate">{shipments.length} export orders</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('documents')}
+              className="flex items-center gap-1.5 p-2 rounded bg-stone-800/90 hover:bg-emerald-950 border border-stone-700/80 hover:border-emerald-700 text-left transition-colors group"
+            >
+              <div className="w-5 h-5 rounded-full bg-emerald-900/80 text-emerald-300 flex items-center justify-center font-mono font-bold text-[10px] shrink-0">4</div>
+              <div className="min-w-0">
+                <div className="font-bold text-stone-100 group-hover:text-emerald-300 truncate">Evidence</div>
+                <div className="text-[10px] text-stone-400 truncate">{documents.length} certificates</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* 4 Primary High-Level Stat Counters */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         
         {/* Farmers */}
         <div 
@@ -193,8 +258,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Export Readiness Funnel (2 cols) */}
-        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-lg p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-lg p-4 sm:p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-stone-100 pb-3 gap-2">
             <div>
               <h2 className="text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-700" />
@@ -206,17 +271,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <button
               onClick={() => setActiveTab('shipments')}
-              className="text-xs text-emerald-800 font-bold hover:underline flex items-center gap-1"
+              className="text-xs text-emerald-800 font-bold hover:underline flex items-center gap-1 self-start sm:self-auto"
             >
               Inspect All <ArrowRight className="w-3 h-3" />
             </button>
           </div>
 
           {/* Status Breakdown Pills */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-emerald-50/80 border border-emerald-200 rounded-md p-3">
               <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
-                <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
                 Ready for Review
               </div>
               <div className="text-2xl font-black text-emerald-900 mt-1">{readyShipments.length}</div>
@@ -225,7 +290,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             <div className="bg-amber-50/80 border border-amber-200 rounded-md p-3">
               <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                <AlertTriangle className="w-4 h-4 text-amber-700" />
+                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
                 Review Required
               </div>
               <div className="text-2xl font-black text-amber-900 mt-1">{reviewShipments.length}</div>
@@ -234,7 +299,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
             <div className="bg-red-50/80 border border-red-200 rounded-md p-3">
               <div className="flex items-center gap-1.5 text-xs font-bold text-red-900">
-                <XCircle className="w-4 h-4 text-red-700" />
+                <XCircle className="w-4 h-4 text-red-700 shrink-0" />
                 Blocked (Missing Data)
               </div>
               <div className="text-2xl font-black text-red-900 mt-1">{blockedShipments.length}</div>
@@ -259,10 +324,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       onSelectShipment(shipment.id);
                       setActiveTab('shipments');
                     }}
-                    className="p-3 bg-white hover:bg-stone-50 transition-colors flex items-center justify-between cursor-pointer group"
+                    className="p-3 bg-white hover:bg-stone-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer group"
                   >
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-bold text-xs text-stone-900 group-hover:text-emerald-800 transition-colors">
                           {shipment.exportReference}
                         </span>
@@ -275,7 +340,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <div className="text-xs font-bold text-stone-900">
                         {shipment.totalQuantityKg.toLocaleString()} kg
                       </div>

@@ -215,6 +215,84 @@ class Store {
     }
   }
 
+  public loginUser(user: User, targetOrgId?: string) {
+    this.state.currentUser = user;
+    if (targetOrgId) {
+      this.state.activeOrgId = targetOrgId;
+    } else if (user.organizationId) {
+      this.state.activeOrgId = user.organizationId;
+    }
+    this.state.isLoading = false;
+    this.logAudit('USER_LOGIN', 'User', user.id, undefined, `Logged in as ${user.name} (${user.role})`);
+    this.notify();
+  }
+
+  public loginWithEmail(email: string, role: UserRole = 'admin', name?: string): { success: boolean; user: User } {
+    // Check if user exists in state
+    const existing = this.state.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (existing) {
+      this.loginUser(existing);
+      return { success: true, user: existing };
+    }
+
+    // Otherwise create or sign in with default user for that email
+    const newUser: User = {
+      id: `usr-${Date.now().toString().slice(-4)}`,
+      name: name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      email,
+      role,
+      organizationId: this.state.activeOrgId,
+      title: role === 'admin' ? 'Head of Quality & Compliance' : role === 'staff' ? 'Field Traceability Officer' : 'Logistics Auditor'
+    };
+    this.state.users = [...this.state.users, newUser];
+    this.loginUser(newUser);
+    return { success: true, user: newUser };
+  }
+
+  public registerAccount(data: {
+    name: string;
+    email: string;
+    organizationName: string;
+    orgType?: string;
+    district?: string;
+    role?: UserRole;
+  }): { success: boolean; user: User; organization: Organization } {
+    const newOrgId = `org-custom-${Date.now().toString().slice(-4)}`;
+    const newOrg: Organization = {
+      id: newOrgId,
+      legalName: data.organizationName,
+      type: (data.orgType as any) || 'Exporter',
+      registrationNumber: `UCDA/EXP/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`,
+      country: 'Uganda',
+      district: data.district || 'Kampala',
+      address: `${data.district || 'Kampala'} Operations Center, Uganda`,
+      contactPhone: '+256 700 000 000',
+      email: data.email,
+      website: `https://${data.organizationName.toLowerCase().replace(/[^a-z0-9]/g, '')}.co.ug`,
+      createdDate: new Date().toISOString().split('T')[0],
+      subscriptionPlan: 'Professional (UGX 600k/mo)',
+      activeStatus: 'Active'
+    };
+
+    const newUser: User = {
+      id: `usr-${Date.now().toString().slice(-4)}`,
+      name: data.name,
+      email: data.email,
+      role: data.role || 'admin',
+      organizationId: newOrgId,
+      title: data.role === 'admin' ? 'Managing Director / Quality Lead' : 'Export Officer'
+    };
+
+    this.state.organizations = [newOrg, ...this.state.organizations];
+    this.state.users = [...this.state.users, newUser];
+    this.state.activeOrgId = newOrgId;
+    this.state.currentUser = newUser;
+    this.logAudit('USER_REGISTER', 'User', newUser.id, undefined, `Registered account ${newUser.name} with org ${newOrg.legalName}`);
+    this.notify();
+
+    return { success: true, user: newUser, organization: newOrg };
+  }
+
   public async logout() {
     try {
       this.state.isLoading = true;

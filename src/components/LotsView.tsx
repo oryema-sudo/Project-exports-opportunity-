@@ -160,35 +160,37 @@ export const LotsView: React.FC<LotsViewProps> = ({
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <span className="font-bold text-stone-500 uppercase tracking-wider text-[10px] flex items-center gap-1">
             <Filter className="w-3 h-3 text-stone-400" /> Filter:
           </span>
 
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Lot Statuses ({lots.length})</option>
-            <option value="Received">Received</option>
-            <option value="Processing">Processing</option>
-            <option value="Processed">Processed</option>
-            <option value="Assigned to Shipment">Assigned to Shipment</option>
-            <option value="Requires Review">Requires Review</option>
-            <option value="Shipped">Shipped</option>
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Lot Statuses ({lots.length})</option>
+              <option value="Received">Received</option>
+              <option value="Processing">Processing</option>
+              <option value="Processed">Processed</option>
+              <option value="Assigned to Shipment">Assigned to Shipment</option>
+              <option value="Requires Review">Requires Review</option>
+              <option value="Shipped">Shipped</option>
+            </select>
 
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Varieties</option>
-            <option value="Robusta">Robusta</option>
-            <option value="Arabica">Arabica</option>
-          </select>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Varieties</option>
+              <option value="Robusta">Robusta</option>
+              <option value="Arabica">Arabica</option>
+            </select>
+          </div>
         </div>
 
         <div className="text-stone-500 font-mono text-xs">
@@ -200,73 +202,134 @@ export const LotsView: React.FC<LotsViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Lots List (2 cols) */}
-        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-stone-200 bg-stone-50 text-stone-600 font-bold">
-                  <th className="py-2.5 px-3">Lot ID & Number</th>
-                  <th className="py-2.5 px-3">Grade & Variety</th>
-                  <th className="py-2.5 px-3">Quantity</th>
-                  <th className="py-2.5 px-3">Processing Station</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {filteredLots.map(lot => {
-                  const isSelected = selectedLot?.id === lot.id;
-                  const isAssigned = lot.assignedShipmentId;
+        <div className="lg:col-span-2 space-y-3">
+          
+          {/* Mobile Lots Cards View (< md screens) */}
+          <div className="block md:hidden space-y-3">
+            {filteredLots.map(lot => {
+              const isSelected = selectedLot?.id === lot.id;
+              return (
+                <div
+                  key={lot.id}
+                  onClick={() => setSelectedLot(lot)}
+                  className={`p-4 bg-white rounded-lg border shadow-sm space-y-2 cursor-pointer transition-colors ${
+                    isSelected ? 'border-emerald-600 bg-emerald-50/40 ring-1 ring-emerald-500' : 'border-stone-200 hover:border-emerald-500'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-sm text-stone-900">{lot.lotNumber}</div>
+                      <div className="text-[10px] text-stone-500 font-mono">Created: {lot.creationDate}</div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
+                      lot.currentStatus === 'Assigned to Shipment' ? 'bg-emerald-100 text-emerald-800' :
+                      lot.currentStatus === 'Requires Review' ? 'bg-red-100 text-red-800' :
+                      lot.currentStatus === 'Processed' ? 'bg-blue-100 text-blue-800' :
+                      'bg-stone-100 text-stone-800'
+                    }`}>
+                      {lot.currentStatus}
+                    </span>
+                  </div>
 
-                  return (
-                    <tr 
-                      key={lot.id} 
-                      onClick={() => setSelectedLot(lot)}
-                      className={`hover:bg-emerald-50/50 cursor-pointer transition-colors ${
-                        isSelected ? 'bg-emerald-50/80 font-semibold' : ''
-                      }`}
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-stone-100">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Grade / Variety</span>
+                      <span className="font-bold text-stone-800">{lot.grade}</span>
+                      <span className="text-stone-500 text-[11px] block">{lot.coffeeType}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Volume</span>
+                      <span className="font-mono font-bold text-emerald-900 text-sm">{lot.quantityKg.toLocaleString()} kg</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
+                    <div className="text-[11px] text-stone-500 truncate max-w-[200px]">
+                      {lot.processingStation}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedLot(lot);
+                      }}
+                      className="text-emerald-800 font-bold text-xs hover:underline flex items-center gap-0.5"
                     >
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-stone-900">{lot.lotNumber}</div>
-                        <div className="text-[10px] text-stone-400 font-mono">Created: {lot.creationDate}</div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="font-bold text-stone-800">{lot.grade}</span>
-                        <div className="text-[10px] text-stone-500">{lot.coffeeType}</div>
-                      </td>
-                      <td className="py-3 px-3 font-mono font-bold text-stone-900">
-                        {lot.quantityKg.toLocaleString()} kg
-                      </td>
-                      <td className="py-3 px-3 text-stone-600">
-                        <div className="truncate max-w-[140px]">{lot.processingStation}</div>
-                        <div className="text-[10px] text-stone-400 truncate max-w-[140px]">{lot.currentLocation}</div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          lot.currentStatus === 'Assigned to Shipment' ? 'bg-emerald-100 text-emerald-800' :
-                          lot.currentStatus === 'Requires Review' ? 'bg-red-100 text-red-800' :
-                          lot.currentStatus === 'Processed' ? 'bg-blue-100 text-blue-800' :
-                          'bg-stone-100 text-stone-800'
-                        }`}>
-                          {lot.currentStatus}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLot(lot);
-                          }}
-                          className="text-emerald-800 font-bold hover:underline text-[11px]"
-                        >
-                          View Timeline
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      Timeline <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Lots Table (>= md screens) */}
+          <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 bg-stone-50 text-stone-600 font-bold">
+                    <th className="py-2.5 px-3">Lot ID & Number</th>
+                    <th className="py-2.5 px-3">Grade & Variety</th>
+                    <th className="py-2.5 px-3">Quantity</th>
+                    <th className="py-2.5 px-3">Processing Station</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredLots.map(lot => {
+                    const isSelected = selectedLot?.id === lot.id;
+
+                    return (
+                      <tr 
+                        key={lot.id} 
+                        onClick={() => setSelectedLot(lot)}
+                        className={`hover:bg-emerald-50/50 cursor-pointer transition-colors ${
+                          isSelected ? 'bg-emerald-50/80 font-semibold' : ''
+                        }`}
+                      >
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-stone-900">{lot.lotNumber}</div>
+                          <div className="text-[10px] text-stone-400 font-mono">Created: {lot.creationDate}</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="font-bold text-stone-800">{lot.grade}</span>
+                          <div className="text-[10px] text-stone-500">{lot.coffeeType}</div>
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-stone-900">
+                          {lot.quantityKg.toLocaleString()} kg
+                        </td>
+                        <td className="py-3 px-3 text-stone-600">
+                          <div className="truncate max-w-[140px]">{lot.processingStation}</div>
+                          <div className="text-[10px] text-stone-400 truncate max-w-[140px]">{lot.currentLocation}</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            lot.currentStatus === 'Assigned to Shipment' ? 'bg-emerald-100 text-emerald-800' :
+                            lot.currentStatus === 'Requires Review' ? 'bg-red-100 text-red-800' :
+                            lot.currentStatus === 'Processed' ? 'bg-blue-100 text-blue-800' :
+                            'bg-stone-100 text-stone-800'
+                          }`}>
+                            {lot.currentStatus}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLot(lot);
+                            }}
+                            className="text-emerald-800 font-bold hover:underline text-[11px]"
+                          >
+                            View Timeline
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -410,7 +473,7 @@ export const LotsView: React.FC<LotsViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Coffee Variety</label>
                   <select

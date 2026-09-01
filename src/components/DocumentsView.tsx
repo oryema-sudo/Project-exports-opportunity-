@@ -117,34 +117,36 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
       </div>
 
       {/* Filters Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-lg text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <span className="font-bold text-stone-500 uppercase tracking-wider text-[10px] flex items-center gap-1">
             <Filter className="w-3 h-3 text-stone-400" /> Filter:
           </span>
 
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 max-w-xs truncate"
-          >
-            <option value="ALL">All Document Types ({documents.length})</option>
-            <option value="Farmer Consent / Due-Diligence Agreement">Farmer Consent Agreements</option>
-            <option value="Land / Production Evidence (Customary / Title)">Land / Production Evidence</option>
-            <option value="UCDA Quality / Grade Inspection Certificate">UCDA Inspection Certificates</option>
-            <option value="Phytosanitary Certificate">Phytosanitary Certificates</option>
-            <option value="Purchase Record / Weighbridge Ticket">Purchase Weighbridge Tickets</option>
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 max-w-xs truncate text-xs"
+            >
+              <option value="ALL">All Document Types ({documents.length})</option>
+              <option value="Farmer Consent / Due-Diligence Agreement">Farmer Consent Agreements</option>
+              <option value="Land / Production Evidence (Customary / Title)">Land / Production Evidence</option>
+              <option value="UCDA Quality / Grade Inspection Certificate">UCDA Inspection Certificates</option>
+              <option value="Phytosanitary Certificate">Phytosanitary Certificates</option>
+              <option value="Purchase Record / Weighbridge Ticket">Purchase Weighbridge Tickets</option>
+            </select>
 
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600"
-          >
-            <option value="ALL">All Verification Statuses</option>
-            <option value="Verified">Verified</option>
-            <option value="Pending">Pending</option>
-          </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-stone-50 border border-stone-300 rounded px-2.5 py-1 text-stone-700 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-600 text-xs"
+            >
+              <option value="ALL">All Verification Statuses</option>
+              <option value="Verified">Verified</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </div>
         </div>
 
         <div className="text-stone-500 font-mono text-xs">
@@ -269,7 +271,7 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-stone-700 font-semibold mb-1">Target Entity Type</label>
                   <select
