@@ -1428,20 +1428,24 @@ apiRouter.get('/shipments/:id/evidence-pack', requireAuth, async (req: AuthReque
       return res.status(404).json({ error: 'Shipment not found' });
     }
 
-    const sLots = await db.select().from(shipmentLots).where(eq(shipmentLots.shipmentId, shipmentId));
+    const sLots = await db.select().from(shipmentLots)
+      .where(and(eq(shipmentLots.shipmentId, shipmentId), eq(shipmentLots.organizationId, orgId)));
     const lotIds = sLots.map(sl => sl.lotId);
     
     let linkedLots: any[] = [];
     if (lotIds.length > 0) {
-      linkedLots = await db.select().from(lots).where(inArray(lots.id, lotIds));
+      linkedLots = await db.select().from(lots)
+        .where(and(inArray(lots.id, lotIds), eq(lots.organizationId, orgId)));
     }
 
     let linkedDeliveries: any[] = [];
     if (lotIds.length > 0) {
-      const lDels = await db.select().from(lotDeliveries).where(inArray(lotDeliveries.lotId, lotIds));
+      const lDels = await db.select().from(lotDeliveries)
+        .where(and(inArray(lotDeliveries.lotId, lotIds), eq(lotDeliveries.organizationId, orgId)));
       const delIds = lDels.map(ld => ld.deliveryId);
       if (delIds.length > 0) {
-        linkedDeliveries = await db.select().from(deliveries).where(inArray(deliveries.id, delIds));
+        linkedDeliveries = await db.select().from(deliveries)
+          .where(and(inArray(deliveries.id, delIds), eq(deliveries.organizationId, orgId)));
       }
     }
 
@@ -1450,12 +1454,14 @@ apiRouter.get('/shipments/:id/evidence-pack', requireAuth, async (req: AuthReque
 
     let linkedFarmers: any[] = [];
     if (farmerIds.length > 0) {
-      linkedFarmers = await db.select().from(farmers).where(inArray(farmers.id, farmerIds));
+      linkedFarmers = await db.select().from(farmers)
+        .where(and(inArray(farmers.id, farmerIds), eq(farmers.organizationId, orgId)));
     }
 
     let linkedFarms: any[] = [];
     if (farmIds.length > 0) {
-      linkedFarms = await db.select().from(farms).where(inArray(farms.id, farmIds));
+      linkedFarms = await db.select().from(farms)
+        .where(and(inArray(farms.id, farmIds), eq(farms.organizationId, orgId)));
     }
 
     const pack = {

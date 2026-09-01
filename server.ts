@@ -8,12 +8,12 @@ import { apiRouter } from "./src/server/apiRouter.ts";
 import { seedOrganizationData } from "./src/server/seedDatabase.ts";
 import { requireAuth, AuthRequest } from "./src/middleware/auth.ts";
 import { createPool } from "./src/db/index.ts";
-import fs from "fs";
+import { storageProvider } from "./src/server/storage.ts";
 import { createServer as createViteServer } from "vite";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT || 3000);
 
   // Request ID & Structured Logging Middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -41,19 +41,105 @@ async function startServer() {
     next();
   });
 
-  // Security Headers (Helmet) with iframe support
+  // Content Security Policy & Security Headers (Helmet) configured for container & iframe environment
   app.use(
     helmet({
-      contentSecurityPolicy: false, // Vite and Leaflet require flexible script/style evaluation
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'", // required by Vite dev client & inline scripts
+            "'unsafe-eval'", // required by Vite dev engine & dynamic imports
+            "https://apis.google.com",
+            "https://*.firebaseio.com",
+            "https://*.googleapis.com",
+            "https://unpkg.com"
+          ],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            "https://fonts.googleapis.com",
+            "https://unpkg.com"
+          ],
+          imgSrc: [
+            "'self'",
+            "data:",
+            "blob:",
+            "https://*.tile.openstreetmap.org",
+            "https://*.basemaps.cartocdn.com",
+            "https://*.cartocdn.com",
+            "https://maps.googleapis.com",
+            "https://maps.gstatic.com",
+            "https://*.googleusercontent.com",
+            "https://unpkg.com"
+          ],
+          connectSrc: [
+            "'self'",
+            "ws:",
+            "wss:",
+            "https://*.googleapis.com",
+            "https://*.firebaseio.com",
+            "https://identitytoolkit.googleapis.com",
+            "https://securetoken.googleapis.com",
+            "https://*.tile.openstreetmap.org",
+            "https://*.basemaps.cartocdn.com",
+            "https://*.run.app",
+            "https://ai.studio"
+          ],
+          fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+          frameSrc: ["'self'", "https://*.firebaseapp.com", "https://accounts.google.com"],
+          frameAncestors: [
+            "'self'",
+            "https://ai.studio",
+            "https://*.google.com",
+            "https://*.googleusercontent.com",
+            "https://*.run.app",
+            "*"
+          ],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"]
+        }
+      },
+      frameguard: false, // Must be disabled so AI Studio iframe embedding is not blocked by X-Frame-Options: SAMEORIGIN
+      crossOriginOpenerPolicy: false,
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: "cross-origin" }
     })
   );
 
-  // Secure CORS
+  // Secure CORS with Allowlist & Development Support
+  const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
+  const configuredOrigins = allowedOriginsEnv
+    ? allowedOriginsEnv.split(",").map(o => o.trim()).filter(Boolean)
+    : [];
+
   app.use(
     cors({
-      origin: true,
+      origin: (origin, callback) => {
+        // Allow requests with no origin (same-origin, curl, server-side, etc.)
+        if (!origin) return callback(null, true);
+        
+        // In non-production or preview container, allow all dev origins
+        if (process.env.NODE_ENV !== "production") {
+          return callback(null, true);
+        }
+
+        // In production, check allowlist and platform domains
+        if (
+          configuredOrigins.length === 0 || 
+          configuredOrigins.includes(origin) || 
+          origin.endsWith('.run.app') || 
+          origin.endsWith('.google.com') || 
+          origin.endsWith('ai.studio') ||
+          origin.startsWith('http://localhost:')
+        ) {
+          return callback(null, true);
+        }
+
+        return callback(null, false);
+      },
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID"]
@@ -109,9 +195,10 @@ async function startServer() {
 
   // Critical Dependency Readiness Probe (/api/ready)
   app.get("/api/ready", async (_req, res) => {
-    const checks: { database: boolean; storage: boolean; error?: string } = {
+    const checks: { database: boolean; storage: boolean; storageProvider: string; error?: string } = {
       database: false,
-      storage: false
+      storage: false,
+      storageProvider: storageProvider.name
     };
 
     try {
@@ -120,15 +207,14 @@ async function startServer() {
       const dbRes = await pool.query("SELECT 1 AS ready");
       checks.database = dbRes.rows.length > 0 && dbRes.rows[0].ready === 1;
 
-      // 2. Private Storage Directory Writability Probe
-      const storageRoot = path.join(process.cwd(), "private_storage");
-      if (!fs.existsSync(storageRoot)) {
-        fs.mkdirSync(storageRoot, { recursive: true });
+      // 2. Storage Health Probe
+      const storageHealth = await storageProvider.checkHealth();
+      checks.storage = storageHealth.ready;
+      checks.storageProvider = storageHealth.provider;
+
+      if (!checks.database || !checks.storage) {
+        throw new Error(`Degraded readiness: db=${checks.database}, storage=${checks.storage}`);
       }
-      const testFile = path.join(storageRoot, `.ready_check_${Date.now()}`);
-      fs.writeFileSync(testFile, "probe");
-      fs.unlinkSync(testFile);
-      checks.storage = true;
 
       res.json({
         status: "ready",
@@ -170,11 +256,11 @@ async function startServer() {
   // Mount Hardened REST API
   app.use("/api", apiRouter);
 
-  // Centralized Error Handling Middleware
+  // Centralized Error Handling Middleware (Sanitized for security)
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     console.error(`[API Error] [${(req as any).id || "unknown"}]`, err);
     res.status(err.status || 500).json({
-      error: err.message || "An unexpected server error occurred",
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : (err.message || "An unexpected server error occurred"),
       requestId: (req as any).id
     });
   });
