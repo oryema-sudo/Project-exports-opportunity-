@@ -44,196 +44,10 @@ async function logOwnerAudit(
 }
 
 /**
- * Helper to ensure baseline platform subscriptions, payments, and expenses exist for demonstration
+ * Clean platform architecture: no synthetic demo tenants or artificial expenses generated.
  */
 async function ensurePlatformBaselineData() {
-  const [existingExpenses] = await db.select({ count: sql<number>`count(*)::int` }).from(businessExpenses);
-  const [existingPayments] = await db.select({ count: sql<number>`count(*)::int` }).from(payments);
-  const [existingOrgs] = await db.select({ count: sql<number>`count(*)::int` }).from(organizations);
-
-  // If no organizations exist at all, create baseline organizations
-  let orgList = await db.select().from(organizations);
-  if (orgList.length === 0) {
-    const [org1] = await db.insert(organizations).values({
-      legalName: 'Great Lakes Coffee Uganda Ltd',
-      type: 'Exporter',
-      registrationNumber: 'UCDA/EXP/2026/019',
-      country: 'Uganda',
-      district: 'Kampala',
-      address: 'Plot 42 Namanve Industrial Estate, Kampala',
-      contactPhone: '+256 414 234 567',
-      email: 'operations@greatlakescoffee.ug',
-      contactEmail: 'finance@greatlakescoffee.ug',
-      website: 'https://greatlakescoffee.ug',
-      subscriptionPlan: 'Enterprise (UGX 1.8M/mo)',
-      activeStatus: 'Active'
-    }).returning();
-
-    const [org2] = await db.insert(organizations).values({
-      legalName: 'Rwenzori High Altitude Coffee Producers Coop',
-      type: 'Cooperative',
-      registrationNumber: 'UCDA/COOP/2026/088',
-      country: 'Uganda',
-      district: 'Kasese',
-      address: 'Kasese Town Centre, Stanley Road',
-      contactPhone: '+256 788 123 784',
-      email: 'info@rwenzoricoffee.ug',
-      contactEmail: 'accounts@rwenzoricoffee.ug',
-      subscriptionPlan: 'Professional (UGX 600k/mo)',
-      activeStatus: 'Active'
-    }).returning();
-
-    const [org3] = await db.insert(organizations).values({
-      legalName: 'Mount Elgon Bugisu Organic Processors',
-      type: 'Processor',
-      registrationNumber: 'UCDA/PROC/2026/044',
-      country: 'Uganda',
-      district: 'Sironko',
-      address: 'Budadiri Central Trading Area, Sironko',
-      contactPhone: '+256 754 819 023',
-      email: 'contact@bugisuorganic.ug',
-      subscriptionPlan: 'Starter (UGX 250k/mo)',
-      activeStatus: 'Active'
-    }).returning();
-
-    const [org4] = await db.insert(organizations).values({
-      legalName: 'Ankole Valley Highland Washing Station',
-      type: 'Washing Station',
-      registrationNumber: 'UCDA/WS/2026/102',
-      country: 'Uganda',
-      district: 'Bushenyi',
-      address: 'Ishaka-Bushenyi Road, Western Uganda',
-      contactPhone: '+256 701 445 990',
-      email: 'admin@ankolewashing.ug',
-      subscriptionPlan: 'Professional (UGX 600k/mo)',
-      activeStatus: 'Trial'
-    }).returning();
-
-    orgList = [org1!, org2!, org3!, org4!];
-  }
-
-  // Ensure subscriptions exist
-  const [subCount] = await db.select({ count: sql<number>`count(*)::int` }).from(subscriptions);
-  if (subCount && subCount.count === 0 && orgList.length > 0) {
-    const plans = [
-      { org: orgList[0]!, planId: 'enterprise' as const, planName: 'Enterprise', amountUgx: 1800000, cycle: 'monthly' as const },
-      { org: orgList[1]!, planId: 'professional' as const, planName: 'Professional', amountUgx: 600000, cycle: 'monthly' as const },
-      { org: orgList[2]!, planId: 'starter' as const, planName: 'Starter', amountUgx: 250000, cycle: 'monthly' as const },
-      { org: orgList[3]!, planId: 'professional' as const, planName: 'Professional', amountUgx: 600000, cycle: 'monthly' as const, status: 'past_due' as const }
-    ];
-
-    for (const p of plans) {
-      const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-      const [sub] = await db.insert(subscriptions).values({
-        organizationId: p.org.id,
-        planId: p.planId,
-        planName: p.planName,
-        status: (p as any).status || 'active',
-        billingCycle: p.cycle,
-        amountUgx: p.amountUgx.toString(),
-        currency: 'UGX',
-        maxFarmers: p.planId === 'enterprise' ? 10000 : (p.planId === 'professional' ? 2500 : 500),
-        maxFarms: p.planId === 'enterprise' ? 15000 : (p.planId === 'professional' ? 4000 : 800),
-        maxShipmentsMonthly: p.planId === 'enterprise' ? 100 : (p.planId === 'professional' ? 30 : 5),
-        currentPeriodStart: start,
-        currentPeriodEnd: end,
-        cancelAtPeriodEnd: false
-      }).returning();
-
-      // Seed payments for active subscriptions
-      if ((p as any).status !== 'past_due') {
-        await db.insert(payments).values({
-          organizationId: p.org.id,
-          subscriptionId: sub!.id,
-          amountUgx: p.amountUgx.toString(),
-          currency: 'UGX',
-          paymentMethod: p.planId === 'enterprise' ? 'BANK_TRANSFER' : (p.planId === 'professional' ? 'MTN_MOMO' : 'AIRTEL_MONEY'),
-          provider: p.planId === 'enterprise' ? 'Stanbic Bank Uganda' : (p.planId === 'professional' ? 'MTN Uganda MoMo Open API' : 'Airtel Money API'),
-          providerTransactionId: `UG-TX-${Math.floor(10000000 + Math.random() * 90000000)}`,
-          idempotencyKey: `sub-init-${sub!.id}-${Date.now()}`,
-          status: 'successful',
-          phoneNumber: p.org.contactPhone,
-          payerEmail: p.org.email,
-          description: `${p.planName} SaaS Platform Subscription Fee`,
-          createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
-        });
-      } else {
-        // Overdue / failed payment record
-        await db.insert(payments).values({
-          organizationId: p.org.id,
-          subscriptionId: sub!.id,
-          amountUgx: p.amountUgx.toString(),
-          currency: 'UGX',
-          paymentMethod: 'MTN_MOMO',
-          provider: 'MTN Uganda MoMo Open API',
-          providerTransactionId: `UG-FAIL-${Math.floor(10000000 + Math.random() * 90000000)}`,
-          idempotencyKey: `sub-fail-${sub!.id}-${Date.now()}`,
-          status: 'failed',
-          phoneNumber: p.org.contactPhone,
-          payerEmail: p.org.email,
-          description: 'Renewal Subscription Fee (Insufficient Balance)',
-          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-        });
-      }
-    }
-  }
-
-  // Ensure business expenses ledger has realistic operational items
-  if (existingExpenses && existingExpenses.count === 0) {
-    await db.insert(businessExpenses).values([
-      {
-        amount: '450000.00',
-        currency: 'UGX',
-        category: 'Cloud Infrastructure',
-        description: 'Google Cloud Platform (Cloud Run, Cloud SQL & Artifact Storage)',
-        date: '2026-08-01',
-        vendor: 'Google Cloud EMEA',
-        recurring: true,
-        receiptReference: 'INV-GCP-202608-8812',
-        createdBy: 'Platform CEO',
-        notes: 'Monthly compute and managed PostgreSQL instance runtime'
-      },
-      {
-        amount: '380000.00',
-        currency: 'UGX',
-        category: 'Telecom & Mobile Money',
-        description: 'MTN MoMo & Airtel Money API Gateway Disbursal / Collection fees',
-        date: '2026-08-05',
-        vendor: 'MTN Uganda & Airtel Africa',
-        recurring: true,
-        receiptReference: 'MOMO-FEE-2026-08',
-        createdBy: 'Platform CEO',
-        notes: 'Mobile money API transaction processing and webhook routing'
-      },
-      {
-        amount: '750000.00',
-        currency: 'UGX',
-        category: 'UCDA Field Operations',
-        description: 'Field surveyor allowance for GPS ground-truth audits in Masaka & Kasese',
-        date: '2026-08-12',
-        vendor: 'Uganda Coffee Field Extension Officers Union',
-        recurring: false,
-        receiptReference: 'EXP-FIELD-2026-0812',
-        createdBy: 'Platform CEO',
-        notes: 'On-site polygon boundary verification and smallholder cadastral check'
-      },
-      {
-        amount: '200000.00',
-        currency: 'UGX',
-        category: 'Legal & Compliance',
-        description: 'Uganda Data Protection and Privacy Act (PDPO) compliance filing review',
-        date: '2026-08-18',
-        vendor: 'Kampala Tech & Agribusiness Advocates',
-        recurring: false,
-        receiptReference: 'INV-LEGAL-2026-44',
-        createdBy: 'Platform CEO',
-        notes: 'Annual data controller audit and EUDR cross-border transfer documentation'
-      }
-    ]);
-  }
+  return;
 }
 
 /**
@@ -1324,5 +1138,413 @@ ownerRouter.get('/export-financials', async (req: AuthRequest, res: Response) =>
   } catch (err: any) {
     console.error('[Owner API] /export-financials error:', err);
     res.status(500).json({ error: 'Failed to export financials' });
+  }
+});
+
+/**
+ * GET /api/owner/users
+ * List all users across all tenant organizations with search and role filters
+ */
+ownerRouter.get('/users', async (req: AuthRequest, res: Response) => {
+  try {
+    const roleFilter = req.query.role as string;
+    const orgFilter = req.query.organizationId as string;
+    const search = (req.query.search as string || '').toLowerCase().trim();
+
+    const query = db.select({
+      id: users.id,
+      uid: users.uid,
+      email: users.email,
+      name: users.name,
+      role: users.role,
+      organizationId: users.organizationId,
+      organizationName: organizations.legalName,
+      title: users.title,
+      isActive: users.isActive,
+      isPlatformOwner: users.isPlatformOwner,
+      platformRole: users.platformRole,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt
+    })
+    .from(users)
+    .leftJoin(organizations, eq(users.organizationId, organizations.id))
+    .orderBy(desc(users.createdAt));
+
+    const rows = await query;
+    let filtered = rows;
+    if (roleFilter && roleFilter !== 'ALL') {
+      filtered = filtered.filter(u => u.role === roleFilter);
+    }
+    if (orgFilter && orgFilter !== 'ALL') {
+      filtered = filtered.filter(u => u.organizationId === orgFilter);
+    }
+    if (search) {
+      filtered = filtered.filter(u => 
+        u.name.toLowerCase().includes(search) || 
+        u.email.toLowerCase().includes(search) || 
+        (u.organizationName && u.organizationName.toLowerCase().includes(search)) ||
+        (u.title && u.title.toLowerCase().includes(search))
+      );
+    }
+
+    res.json(filtered.map(u => ({
+      ...u,
+      organizationName: u.organizationName || 'Unassigned Organization',
+      createdAt: u.createdAt.toISOString(),
+      updatedAt: u.updatedAt.toISOString()
+    })));
+  } catch (err: any) {
+    console.error('[Owner API] GET /users error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch platform users' });
+  }
+});
+
+/**
+ * PATCH /api/owner/users/:id
+ * Update user active status or role across organizations with audit log
+ */
+ownerRouter.patch('/users/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.params.id as string;
+    const { role, isActive, isPlatformOwner, platformRole, title } = req.body;
+
+    const [existing] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!existing) {
+      return res.status(404).json({ error: 'User record not found' });
+    }
+
+    const updateData: any = { updatedAt: new Date() };
+    if (role !== undefined) {
+      if (!['admin', 'staff', 'viewer'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid user role' });
+      }
+      updateData.role = role;
+    }
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+    if (isPlatformOwner !== undefined) updateData.isPlatformOwner = Boolean(isPlatformOwner);
+    if (platformRole !== undefined) updateData.platformRole = platformRole;
+    if (title !== undefined) updateData.title = title;
+
+    const [updated] = await db.update(users)
+      .set(updateData)
+      .where(eq(users.id, userId))
+      .returning();
+
+    await logOwnerAudit(
+      req,
+      'User Account Mutated',
+      'User',
+      userId,
+      `${existing.email} (Role: ${existing.role}, Active: ${existing.isActive})`,
+      `${updated!.email} (Role: ${updated!.role}, Active: ${updated!.isActive})`
+    );
+
+    res.json({
+      success: true,
+      message: `User ${existing.email} updated successfully`,
+      user: updated
+    });
+  } catch (err: any) {
+    console.error('[Owner API] PATCH /users/:id error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update user' });
+  }
+});
+
+/**
+ * GET /api/owner/plans
+ * Canonical subscription tiers catalog with limits and active subscriber counts
+ */
+ownerRouter.get('/plans', async (req: AuthRequest, res: Response) => {
+  try {
+    const allSubs = await db.select().from(subscriptions);
+    const subscriberCounts: Record<string, number> = { starter: 0, professional: 0, enterprise: 0 };
+    allSubs.forEach(s => {
+      const pid = (s.planId || 'starter').toLowerCase();
+      if (s.status === 'active') {
+        subscriberCounts[pid] = (subscriberCounts[pid] || 0) + 1;
+      }
+    });
+
+    const plans = [
+      {
+        id: 'starter',
+        name: 'Starter Exporter',
+        description: 'Designed for single-washing station operations and emerging exporters establishing regulatory baselines.',
+        monthlyPriceUgx: 250000,
+        annualPriceUgx: 2400000,
+        maxFarmers: 500,
+        maxFarms: 1000,
+        maxShipmentsMonthly: 5,
+        features: [
+          'GPS Polygon boundary mapping up to 1,000 plots',
+          'UCDA standard compliance check and validation',
+          'Intake & lot trace event logging',
+          'Mobile Money subscription billing'
+        ],
+        subscribersCount: subscriberCounts['starter'] || 0
+      },
+      {
+        id: 'professional',
+        name: 'Professional Exporter',
+        description: 'Standard tier for medium commercial exporters and cooperative unions managing regional supply chains.',
+        monthlyPriceUgx: 600000,
+        annualPriceUgx: 6000000,
+        maxFarmers: 5000,
+        maxFarms: 10000,
+        maxShipmentsMonthly: 50,
+        features: [
+          'Up to 10,000 GPS farm plots and polygons',
+          'Full Due Diligence audit packs with GeoJSON export',
+          'Unlimited staff & field agent accounts with RBAC',
+          'Automated consignment readiness evaluations',
+          'Deforestation cut-off validation'
+        ],
+        subscribersCount: subscriberCounts['professional'] || 0
+      },
+      {
+        id: 'enterprise',
+        name: 'Enterprise Union',
+        description: 'Large-scale national apex bodies, multinational trade desks, and multi-district cooperatives.',
+        monthlyPriceUgx: 1800000,
+        annualPriceUgx: 18000000,
+        maxFarmers: 25000,
+        maxFarms: 50000,
+        maxShipmentsMonthly: 500,
+        features: [
+          'Unlimited farmers & national polygon registry',
+          'Dedicated SLA & custom audit integrations',
+          'Direct ERP / API consignment automated pipelines',
+          'Priority export compliance certification support',
+          'Custom regulatory data retention & escrow'
+        ],
+        subscribersCount: subscriberCounts['enterprise'] || 0
+      }
+    ];
+
+    res.json(plans);
+  } catch (err: any) {
+    console.error('[Owner API] GET /plans error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch plans catalog' });
+  }
+});
+
+/**
+ * GET /api/owner/audit-logs
+ * System-wide cryptographic & immutable audit trail across tenants
+ */
+ownerRouter.get('/audit-logs', async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.query.organizationId as string;
+    const actionSearch = (req.query.search as string || '').toLowerCase().trim();
+    const limit = Math.min(Number(req.query.limit) || 100, 300);
+
+    const rows = await db.select({
+      id: auditLogs.id,
+      organizationId: auditLogs.organizationId,
+      organizationName: organizations.legalName,
+      userId: auditLogs.userId,
+      userName: auditLogs.userName,
+      userRole: auditLogs.userRole,
+      action: auditLogs.action,
+      entity: auditLogs.entity,
+      entityId: auditLogs.entityId,
+      timestamp: auditLogs.timestamp,
+      previousValue: auditLogs.previousValue,
+      newValue: auditLogs.newValue,
+      ipAddress: auditLogs.ipAddress
+    })
+    .from(auditLogs)
+    .leftJoin(organizations, eq(auditLogs.organizationId, organizations.id))
+    .orderBy(desc(auditLogs.timestamp))
+    .limit(limit);
+
+    let filtered = rows;
+    if (orgId && orgId !== 'ALL') {
+      filtered = filtered.filter(l => l.organizationId === orgId);
+    }
+    if (actionSearch) {
+      filtered = filtered.filter(l => 
+        l.action.toLowerCase().includes(actionSearch) ||
+        l.entity.toLowerCase().includes(actionSearch) ||
+        l.userName.toLowerCase().includes(actionSearch) ||
+        (l.organizationName && l.organizationName.toLowerCase().includes(actionSearch)) ||
+        (l.newValue && l.newValue.toLowerCase().includes(actionSearch))
+      );
+    }
+
+    res.json(filtered.map(l => ({
+      ...l,
+      organizationName: l.organizationName || (l.action.startsWith('[PLATFORM_OWNER]') ? 'Platform Operator' : 'System Wide'),
+      timestamp: l.timestamp.toISOString()
+    })));
+  } catch (err: any) {
+    console.error('[Owner API] GET /audit-logs error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch platform audit logs' });
+  }
+});
+
+/**
+ * GET /api/owner/organizations/:id
+ * Deep multi-tenant drill-down for a single organization
+ */
+ownerRouter.get('/organizations/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.params.id as string;
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    const orgUsers = await db.select().from(users).where(eq(users.organizationId, orgId)).orderBy(desc(users.createdAt));
+    const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.organizationId, orgId)).limit(1);
+    const orgPayments = await db.select().from(payments).where(eq(payments.organizationId, orgId)).orderBy(desc(payments.createdAt));
+    
+    const [farmersCount] = await db.select({ count: sql<number>`count(*)::int` }).from(farmers).where(eq(farmers.organizationId, orgId));
+    const [farmsCount] = await db.select({ count: sql<number>`count(*)::int` }).from(farms).where(eq(farms.organizationId, orgId));
+    const [deliveriesStats] = await db.select({ 
+      count: sql<number>`count(*)::int`, 
+      totalKg: sql<number>`coalesce(sum(quantity_kg), 0)::numeric` 
+    }).from(deliveries).where(eq(deliveries.organizationId, orgId));
+    const [lotsCount] = await db.select({ count: sql<number>`count(*)::int` }).from(lots).where(eq(lots.organizationId, orgId));
+    const [shipmentsCount] = await db.select({ count: sql<number>`count(*)::int` }).from(shipments).where(eq(shipments.organizationId, orgId));
+    const [documentsCount] = await db.select({ count: sql<number>`count(*)::int` }).from(documents).where(eq(documents.organizationId, orgId));
+    const [auditCount] = await db.select({ count: sql<number>`count(*)::int` }).from(auditLogs).where(eq(auditLogs.organizationId, orgId));
+
+    const recentLogs = await db.select().from(auditLogs).where(eq(auditLogs.organizationId, orgId)).orderBy(desc(auditLogs.timestamp)).limit(15);
+
+    res.json({
+      organization: org,
+      users: orgUsers.map(u => ({
+        ...u,
+        organizationName: org.legalName,
+        createdAt: u.createdAt.toISOString(),
+        updatedAt: u.updatedAt.toISOString()
+      })),
+      subscription: sub ? {
+        ...sub,
+        organizationName: org.legalName,
+        contactEmail: org.email,
+        district: org.district,
+        amountUgx: Number(sub.amountUgx) || 0,
+        currentPeriodStart: sub.currentPeriodStart.toISOString(),
+        currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
+        createdAt: sub.createdAt.toISOString()
+      } : null,
+      payments: orgPayments.map(p => ({
+        ...p,
+        amountUgx: Number(p.amountUgx) || 0,
+        organizationName: org.legalName,
+        createdAt: p.createdAt.toISOString()
+      })),
+      stats: {
+        farmersCount: farmersCount?.count || 0,
+        farmsCount: farmsCount?.count || 0,
+        deliveriesCount: deliveriesStats?.count || 0,
+        totalCoffeeQuantityKg: Number(deliveriesStats?.totalKg) || 0,
+        lotsCount: lotsCount?.count || 0,
+        shipmentsCount: shipmentsCount?.count || 0,
+        documentsCount: documentsCount?.count || 0,
+        auditLogsCount: auditCount?.count || 0
+      },
+      recentAuditLogs: recentLogs.map(l => ({
+        ...l,
+        organizationName: org.legalName,
+        timestamp: l.timestamp.toISOString()
+      }))
+    });
+  } catch (err: any) {
+    console.error('[Owner API] GET /organizations/:id error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch organization drilldown' });
+  }
+});
+
+/**
+ * POST /api/owner/organizations/:id/subscription
+ * Change or provision subscription plan for an organization
+ */
+ownerRouter.post('/organizations/:id/subscription', async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.params.id as string;
+    const { planId, billingCycle = 'monthly', status = 'active', durationDays = 30 } = req.body;
+
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    const planConfig: Record<string, { name: string; monthlyUgx: number; annualUgx: number; maxFarmers: number; maxFarms: number; maxShipments: number }> = {
+      starter: { name: 'Starter Exporter', monthlyUgx: 250000, annualUgx: 2400000, maxFarmers: 500, maxFarms: 1000, maxShipments: 5 },
+      professional: { name: 'Professional Exporter', monthlyUgx: 600000, annualUgx: 6000000, maxFarmers: 5000, maxFarms: 10000, maxShipments: 50 },
+      enterprise: { name: 'Enterprise Union', monthlyUgx: 1800000, annualUgx: 18000000, maxFarmers: 25000, maxFarms: 50000, maxShipments: 500 }
+    };
+
+    const targetConfig = planConfig[planId.toLowerCase()] || planConfig['professional']!;
+    const amount = billingCycle === 'annual' ? targetConfig.annualUgx : targetConfig.monthlyUgx;
+
+    const periodStart = new Date();
+    const periodEnd = new Date(Date.now() + (Number(durationDays) || 30) * 24 * 60 * 60 * 1000);
+
+    const [existingSub] = await db.select().from(subscriptions).where(eq(subscriptions.organizationId, orgId)).limit(1);
+
+    let savedSub;
+    if (existingSub) {
+      [savedSub] = await db.update(subscriptions)
+        .set({
+          planId: planId.toLowerCase(),
+          planName: targetConfig.name,
+          status,
+          billingCycle,
+          amountUgx: amount.toString(),
+          maxFarmers: targetConfig.maxFarmers,
+          maxFarms: targetConfig.maxFarms,
+          maxShipmentsMonthly: targetConfig.maxShipments,
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          updatedAt: new Date()
+        })
+        .where(eq(subscriptions.id, existingSub.id))
+        .returning();
+    } else {
+      [savedSub] = await db.insert(subscriptions).values({
+        organizationId: orgId,
+        planId: planId.toLowerCase(),
+        planName: targetConfig.name,
+        status,
+        billingCycle,
+        amountUgx: amount.toString(),
+        currency: 'UGX',
+        maxFarmers: targetConfig.maxFarmers,
+        maxFarms: targetConfig.maxFarms,
+        maxShipmentsMonthly: targetConfig.maxShipments,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd
+      }).returning();
+    }
+
+    // Update organizations table representation
+    await db.update(organizations)
+      .set({
+        subscriptionPlan: `${targetConfig.name} (UGX ${(amount / (billingCycle === 'annual' ? 12 : 1)).toLocaleString()}/mo)`,
+        updatedAt: new Date()
+      })
+      .where(eq(organizations.id, orgId));
+
+    await logOwnerAudit(
+      req,
+      'Subscription Assigned / Mutated',
+      'Subscription',
+      savedSub!.id,
+      existingSub ? `${existingSub.planName} (${existingSub.status})` : 'None',
+      `${targetConfig.name} (${status}) - UGX ${amount.toLocaleString()}/${billingCycle}`
+    );
+
+    res.json({
+      success: true,
+      message: `Organization subscription updated to ${targetConfig.name}`,
+      subscription: savedSub
+    });
+  } catch (err: any) {
+    console.error('[Owner API] Update org subscription error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update organization subscription' });
   }
 });

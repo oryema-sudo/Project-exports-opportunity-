@@ -491,3 +491,87 @@ export interface OwnerAlert {
   actionUrl?: string;
 }
 
+export interface OwnerUserRecord {
+  id: string;
+  uid: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'staff' | 'viewer' | string;
+  organizationId: string;
+  organizationName: string;
+  title?: string | null;
+  isActive: boolean;
+  isPlatformOwner: boolean;
+  platformRole?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OwnerSubscriptionRecord {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  contactEmail: string;
+  district: string;
+  planId: string;
+  planName: string;
+  status: SubscriptionStatus | string;
+  billingCycle: 'monthly' | 'annual' | string;
+  amountUgx: number;
+  currency: string;
+  maxFarmers: number;
+  maxFarms: number;
+  maxShipmentsMonthly: number;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  createdAt: string;
+}
+
+export interface OwnerPlanDefinition {
+  id: string;
+  name: string;
+  description: string;
+  monthlyPriceUgx: number;
+  annualPriceUgx: number;
+  maxFarmers: number;
+  maxFarms: number;
+  maxShipmentsMonthly: number;
+  features: string[];
+  subscribersCount?: number;
+}
+
+export interface OwnerAuditRecord {
+  id: string;
+  organizationId: string;
+  organizationName?: string;
+  userId?: string | null;
+  userName: string;
+  userRole: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  timestamp: string;
+  previousValue?: string | null;
+  newValue?: string | null;
+  ipAddress?: string | null;
+}
+
+export interface OwnerOrganizationDetail {
+  organization: Organization;
+  users: OwnerUserRecord[];
+  subscription: OwnerSubscriptionRecord | null;
+  payments: PaymentRecord[];
+  stats: {
+    farmersCount: number;
+    farmsCount: number;
+    deliveriesCount: number;
+    totalCoffeeQuantityKg: number;
+    lotsCount: number;
+    shipmentsCount: number;
+    documentsCount: number;
+    auditLogsCount: number;
+  };
+  recentAuditLogs: OwnerAuditRecord[];
+}
+

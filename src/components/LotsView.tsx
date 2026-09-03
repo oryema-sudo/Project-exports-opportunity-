@@ -16,6 +16,7 @@ import {
   Building,
   ArrowRight
 } from 'lucide-react';
+import { EmptyState } from './EmptyState';
 
 interface LotsViewProps {
   state: AppState;
@@ -198,8 +199,26 @@ export const LotsView: React.FC<LotsViewProps> = ({
         </div>
       </div>
 
-      {/* Main Grid: Lots Table & Active Lot Inspector */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {lots.length === 0 ? (
+        <EmptyState
+          icon={Layers}
+          title="No processing lots formed yet"
+          description="Form distinct processing lots from intake deliveries to track hulling mass balance, moisture levels, and warehouse movement."
+          primaryAction={
+            currentUser.role !== 'viewer'
+              ? {
+                  label: "Create First Processing Lot",
+                  onClick: () => setShowCreateModal(true),
+                  icon: Plus
+                }
+              : undefined
+          }
+          guidance="Lots aggregate one or more intake delivery receipts to preserve origin custody through dry mill processing."
+          badge="DRY MILL & LOT FORMATION"
+        />
+      ) : (
+        /* Main Grid: Lots Table & Active Lot Inspector */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Lots List (2 cols) */}
         <div className="lg:col-span-2 space-y-3">
@@ -446,6 +465,7 @@ export const LotsView: React.FC<LotsViewProps> = ({
         </div>
 
       </div>
+      )}
 
       {/* CREATE LOT MODAL */}
       {showCreateModal && (

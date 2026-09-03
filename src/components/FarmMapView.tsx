@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { UGANDA_DISTRICTS, isUgandaCoordinates } from '../data/ugandaRegions';
 import L from 'leaflet';
+import { EmptyState } from './EmptyState';
 
 interface FarmMapViewProps {
   state: AppState;
@@ -334,8 +335,26 @@ export const FarmMapView: React.FC<FarmMapViewProps> = ({
         </div>
       </div>
 
-      {/* Map & Farm Inspector Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {farms.length === 0 ? (
+        <EmptyState
+          icon={Compass}
+          title="No farm plots surveyed or mapped yet"
+          description="Register smallholder coffee parcels to record GPS coordinates, polygon boundaries, and cadastral records required for EUDR compliance."
+          primaryAction={
+            currentUser.role !== 'viewer'
+              ? {
+                  label: "Map First Farm Plot",
+                  onClick: openAddModal,
+                  icon: Plus
+                }
+              : undefined
+          }
+          guidance="Each plot must link to a registered farmer and feature valid Ugandan coordinates (WGS84 EPSG:4326)."
+          badge="GEOSPATIAL CADASTRE"
+        />
+      ) : (
+        /* Map & Farm Inspector Grid */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Interactive Leaflet Map (2 cols) */}
         <div className="lg:col-span-2 bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm flex flex-col h-[380px] sm:h-[480px] lg:h-[520px]">
@@ -428,6 +447,7 @@ export const FarmMapView: React.FC<FarmMapViewProps> = ({
         </div>
 
       </div>
+      )}
 
       {/* ADD / EDIT FARM MODAL */}
       {showAddFarmModal && (

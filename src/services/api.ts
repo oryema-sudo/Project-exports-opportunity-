@@ -2,7 +2,8 @@ import { auth } from '../lib/firebase';
 import { 
   Farmer, FarmPlot, Delivery, Lot, Shipment, DocumentRecord, 
   AuditLog, TraceabilityEvent, ReadinessScorecard, Organization, User,
-  OwnerOverviewMetrics, OwnerRevenueData, BusinessExpense, OwnerCustomerRecord, OwnerAlert
+  OwnerOverviewMetrics, OwnerRevenueData, BusinessExpense, OwnerCustomerRecord, OwnerAlert,
+  OwnerUserRecord, OwnerSubscriptionRecord, OwnerPlanDefinition, OwnerAuditRecord, OwnerOrganizationDetail
 } from '../types';
 
 async function getAuthHeader(): Promise<HeadersInit> {
@@ -633,6 +634,84 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to fetch alerts');
+    }
+    return res.json();
+  },
+
+  async getOwnerUsers(params?: { role?: string; organizationId?: string; search?: string }): Promise<OwnerUserRecord[]> {
+    const headers = await getAuthHeader();
+    const query = new URLSearchParams();
+    if (params?.role) query.set('role', params.role);
+    if (params?.organizationId) query.set('organizationId', params.organizationId);
+    if (params?.search) query.set('search', params.search);
+    const url = `/api/owner/users${query.toString() ? `?${query.toString()}` : ''}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch platform users');
+    }
+    return res.json();
+  },
+
+  async updateOwnerUser(id: string, data: { role?: string; isActive?: boolean; isPlatformOwner?: boolean; platformRole?: string | null; title?: string }): Promise<any> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/owner/users/${id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update user');
+    }
+    return res.json();
+  },
+
+  async getOwnerPlans(): Promise<OwnerPlanDefinition[]> {
+    const headers = await getAuthHeader();
+    const res = await fetch('/api/owner/plans', { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch subscription plans catalog');
+    }
+    return res.json();
+  },
+
+  async getOwnerAuditLogs(params?: { organizationId?: string; search?: string; limit?: number }): Promise<OwnerAuditRecord[]> {
+    const headers = await getAuthHeader();
+    const query = new URLSearchParams();
+    if (params?.organizationId) query.set('organizationId', params.organizationId);
+    if (params?.search) query.set('search', params.search);
+    if (params?.limit) query.set('limit', params.limit.toString());
+    const url = `/api/owner/audit-logs${query.toString() ? `?${query.toString()}` : ''}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch audit logs');
+    }
+    return res.json();
+  },
+
+  async getOwnerOrganizationDetail(id: string): Promise<OwnerOrganizationDetail> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/owner/organizations/${id}`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch organization details');
+    }
+    return res.json();
+  },
+
+  async updateOwnerOrgSubscription(orgId: string, data: { planId: string; billingCycle?: 'monthly' | 'annual'; status?: string; durationDays?: number }): Promise<any> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`/api/owner/organizations/${orgId}/subscription`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update organization subscription');
     }
     return res.json();
   }

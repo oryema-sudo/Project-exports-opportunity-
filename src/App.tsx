@@ -3,6 +3,8 @@ import { appStore, AppState } from './services/store';
 import { UserRole } from './types';
 import { Navigation, ActiveTab } from './components/Navigation';
 import { HomePage } from './components/HomePage';
+import { LoginPage } from './components/LoginPage';
+import { SignUpPage } from './components/SignUpPage';
 import { AuthModal } from './components/AuthModal';
 import { Dashboard } from './components/Dashboard';
 import { ShipmentsView } from './components/ShipmentsView';
@@ -25,11 +27,11 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      if (tabParam && ['home', 'dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(tabParam)) {
+      if (tabParam && ['home', 'login', 'signup', 'dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(tabParam)) {
         return tabParam as ActiveTab;
       }
       const hash = window.location.hash.replace('#', '');
-      if (hash && ['home', 'dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(hash)) {
+      if (hash && ['home', 'login', 'signup', 'dashboard', 'shipments', 'lots', 'deliveries', 'farmers', 'map', 'documents', 'audit', 'owner'].includes(hash)) {
         return hash as ActiveTab;
       }
     } catch {
@@ -128,12 +130,36 @@ export default function App() {
   const selectedShipment = state.shipments.find(s => s.id === selectedShipmentId);
   const selectedShipmentScorecard = selectedShipmentId ? appStore.getShipmentScorecard(selectedShipmentId) : null;
 
+  // If in 'login' tab, render dedicated LoginPage
+  if (activeTab === 'login') {
+    return (
+      <LoginPage
+        onSuccess={() => setActiveTab('dashboard')}
+        onNavigateToSignUp={() => setActiveTab('signup')}
+        onClose={() => setActiveTab('home')}
+      />
+    );
+  }
+
+  // If in 'signup' tab, render dedicated SignUpPage
+  if (activeTab === 'signup') {
+    return (
+      <SignUpPage
+        onSuccess={() => setActiveTab('dashboard')}
+        onNavigateToLogin={() => setActiveTab('login')}
+        onClose={() => setActiveTab('home')}
+      />
+    );
+  }
+
   // If in 'home' tab, render dedicated HomePage
   if (activeTab === 'home') {
     return (
       <>
         <HomePage 
           onEnterApp={() => setActiveTab('dashboard')} 
+          onOpenLogin={() => handleOpenAuthModal('login')}
+          onOpenSignUp={() => handleOpenAuthModal('signup')}
         />
         {/* Modals available globally */}
         <AuthModal

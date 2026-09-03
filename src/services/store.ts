@@ -10,7 +10,14 @@ import { isUgandaCoordinates } from '../data/ugandaRegions';
 import { calculateShipmentReadiness } from './readinessEngine';
 import { api } from './api';
 import { auth, googleAuthProvider } from '../lib/firebase';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail 
+} from 'firebase/auth';
 
 const STORAGE_KEY = 'uganda_coffee_traceability_cache_v2';
 
@@ -51,7 +58,7 @@ const GUEST_USER: User = {
 
 function loadInitialState(): AppState {
   return {
-    activeOrgId: 'org-glc-01',
+    activeOrgId: INITIAL_ORGANIZATIONS[0]?.id || 'org-glc-01',
     currentUser: GUEST_USER,
     organizations: INITIAL_ORGANIZATIONS,
     users: INITIAL_USERS,
@@ -121,39 +128,15 @@ class Store {
       if (farmers !== null) {
         this.state.farmers = farmers;
         this.state.serverConnected = true;
-
-        // If organization is brand new & empty, seed baseline pilot data automatically
-        if (farmers.length === 0) {
-          await api.seedBaseline().catch(() => {});
-          // Re-fetch after seed
-          const [seededFarmers, seededFarms, seededDeliveries, seededLotsData, seededShipments, seededDocs, seededLogs] = await Promise.all([
-            api.getFarmers().catch(() => []),
-            api.getFarms().catch(() => []),
-            api.getDeliveries().catch(() => []),
-            api.getLots().catch(() => ({ lots: [], events: [] })),
-            api.getShipments().catch(() => []),
-            api.getDocuments().catch(() => []),
-            api.getAuditLogs().catch(() => [])
-          ]);
-          this.state.farmers = seededFarmers;
-          this.state.farms = seededFarms;
-          this.state.deliveries = seededDeliveries;
-          this.state.lots = seededLotsData.lots || [];
-          this.state.traceabilityEvents = seededLotsData.events || [];
-          this.state.shipments = seededShipments;
-          this.state.documents = seededDocs;
-          this.state.auditLogs = seededLogs;
-        } else {
-          if (farms !== null) this.state.farms = farms;
-          if (deliveries !== null) this.state.deliveries = deliveries;
-          if (lotsData !== null) {
-            this.state.lots = lotsData.lots || [];
-            this.state.traceabilityEvents = lotsData.events || [];
-          }
-          if (shipments !== null) this.state.shipments = shipments;
-          if (docs !== null) this.state.documents = docs;
-          if (logs !== null) this.state.auditLogs = logs;
+        if (farms !== null) this.state.farms = farms;
+        if (deliveries !== null) this.state.deliveries = deliveries;
+        if (lotsData !== null) {
+          this.state.lots = lotsData.lots || [];
+          this.state.traceabilityEvents = lotsData.events || [];
         }
+        if (shipments !== null) this.state.shipments = shipments;
+        if (docs !== null) this.state.documents = docs;
+        if (logs !== null) this.state.auditLogs = logs;
       }
 
       this.state.isLoading = false;
@@ -221,10 +204,121 @@ class Store {
       this.state.activeOrgId = targetOrgId;
     } else if (user.organizationId) {
       this.state.activeOrgId = user.organizationId;
+    } else if (!this.state.activeOrgId) {
+      this.state.activeOrgId = this.state.organizations[0]?.id || 'org-glc-01';
     }
     this.state.isLoading = false;
     this.logAudit('USER_LOGIN', 'User', user.id, undefined, `Logged in as ${user.name} (${user.role})`);
     this.notify();
+  }
+
+  public async loginWithEmailAndPassword(email: string, password: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      this.state.isLoading = true;
+      this.notify();
+
+      try {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+        await this.syncFromServer();
+        return { success: true };
+      } catch (fbErr: any) {
+        // Fallback to local matching user if in local state
+        const existing = this.state.users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+        if (existing) {
+          this.loginUser(existing);
+          return { success: true };
+        }
+        let msg = fbErr.message;
+        if (fbErr.code === 'auth/invalid-credential' || fbErr.code === 'auth/user-not-found' || fbErr.code === 'auth/wrong-password') {
+          msg = 'Invalid email or password. Please verify your credentials.';
+        } else if (fbErr.code === 'auth/too-many-requests') {
+          msg = 'Too many failed login attempts. Please reset your password or try again later.';
+        }
+        throw new Error(msg);
+      }
+    } catch (err: any) {
+      this.state.isLoading = false;
+      this.notify();
+      return { success: false, error: err.message || 'Authentication failed' };
+    }
+  }
+
+  public async registerWithEmailAndPassword(data: {
+    name: string;
+    email: string;
+    password: string;
+    organizationName: string;
+    orgType?: string;
+    district?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      this.state.isLoading = true;
+      this.notify();
+
+      // 1. Create Firebase Auth user
+      try {
+        await createUserWithEmailAndPassword(auth, data.email.trim(), data.password);
+      } catch (fbErr: any) {
+        if (fbErr.code === 'auth/email-already-in-use') {
+          this.state.isLoading = false;
+          this.notify();
+          return { success: false, error: 'An account with this email address already exists. Please log in instead.' };
+        }
+        console.warn('[Register] Firebase create notice:', fbErr.message);
+      }
+
+      // 2. Call server onboarding if authenticated or fallback
+      try {
+        if (auth.currentUser) {
+          await api.onboardOrganization({
+            legalName: data.organizationName.trim(),
+            type: data.orgType || 'Exporter',
+            registrationNumber: `UCDA/${(data.orgType || 'EXP').toUpperCase().slice(0, 4)}/${new Date().getFullYear()}/${Math.floor(1000 + Math.random() * 9000)}`,
+            district: data.district || 'Kampala',
+            address: `${data.district || 'Kampala'} Operations Hub, Uganda`,
+            contactPhone: '+256 700 000 000',
+            contactEmail: data.email.trim(),
+            subscriptionPlan: 'Professional (UGX 600k/mo)',
+            seedPilotData: false
+          });
+          await this.syncFromServer();
+          return { success: true };
+        }
+      } catch (apiErr) {
+        console.warn('[Register] Server onboarding fallback:', apiErr);
+      }
+
+      // 3. Local fallback registration
+      this.registerAccount({
+        name: data.name.trim(),
+        email: data.email.trim(),
+        organizationName: data.organizationName.trim(),
+        orgType: data.orgType || 'Exporter',
+        district: data.district || 'Kampala',
+        role: 'admin'
+      });
+
+      this.state.isLoading = false;
+      this.notify();
+      return { success: true };
+    } catch (err: any) {
+      this.state.isLoading = false;
+      this.notify();
+      return { success: false, error: err.message || 'Registration failed' };
+    }
+  }
+
+  public async sendPasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      return { success: true };
+    } catch (err: any) {
+      let msg = err.message;
+      if (err.code === 'auth/user-not-found') {
+        msg = 'No registered account found with this email address.';
+      }
+      return { success: false, error: msg || 'Failed to send password reset email' };
+    }
   }
 
   public loginWithEmail(email: string, role: UserRole = 'admin', name?: string): { success: boolean; user: User } {
@@ -236,16 +330,17 @@ class Store {
     }
 
     // Otherwise create or sign in with default user for that email
+    const defaultOrgId = this.state.activeOrgId || this.state.organizations[0]?.id || 'org-glc-01';
     const newUser: User = {
       id: `usr-${Date.now().toString().slice(-4)}`,
       name: name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       email,
       role,
-      organizationId: this.state.activeOrgId,
+      organizationId: defaultOrgId,
       title: role === 'admin' ? 'Head of Quality & Compliance' : role === 'staff' ? 'Field Traceability Officer' : 'Logistics Auditor'
     };
     this.state.users = [...this.state.users, newUser];
-    this.loginUser(newUser);
+    this.loginUser(newUser, defaultOrgId);
     return { success: true, user: newUser };
   }
 

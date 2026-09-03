@@ -14,6 +14,7 @@ import {
   DollarSign,
   AlertCircle
 } from 'lucide-react';
+import { EmptyState } from './EmptyState';
 
 interface DeliveriesViewProps {
   state: AppState;
@@ -201,155 +202,173 @@ export const DeliveriesView: React.FC<DeliveriesViewProps> = ({
         </div>
       </div>
 
-      {/* Deliveries Mobile Cards (< md screens) */}
-      <div className="block md:hidden space-y-3">
-        {filteredDeliveries.length === 0 ? (
-          <div className="py-8 text-center text-stone-500 bg-white border border-stone-200 rounded-lg p-6">
-            <AlertCircle className="w-6 h-6 mx-auto text-stone-400 mb-2" />
-            <p className="font-semibold text-xs">No smallholder purchase receipts found</p>
-            <p className="text-[11px] text-stone-400 mt-1">Record a farmer purchase or import delivery tickets to populate this intake ledger.</p>
+      {filteredDeliveries.length === 0 ? (
+        <EmptyState
+          icon={Scale}
+          title={deliveries.length === 0 ? "No cherry intake deliveries recorded yet" : "No matching deliveries found"}
+          description={
+            deliveries.length === 0
+              ? "Record primary scale receipts at washing stations or collection centers to link farmer harvest with processing lots."
+              : "No deliveries match your current filter or search criteria. Try adjusting or clearing your filters."
+          }
+          primaryAction={
+            deliveries.length === 0
+              ? (currentUser?.role !== 'viewer'
+                  ? {
+                      label: "Log First Delivery",
+                      onClick: () => setShowCreateModal(true),
+                      icon: Plus
+                    }
+                  : undefined)
+              : {
+                  label: "Clear Filters",
+                  onClick: () => {
+                    setFilterCoffeeType('ALL');
+                  }
+                }
+          }
+          guidance={
+            deliveries.length === 0
+              ? "Ensure net kilograms, moisture percentage, and registered farmer reference are recorded for each delivery ticket."
+              : undefined
+          }
+          badge="INTAKE & SCALE RECEIPTS"
+        />
+      ) : (
+        <>
+          {/* Deliveries Mobile Cards (< md screens) */}
+          <div className="block md:hidden space-y-3">
+            {filteredDeliveries.map(del => {
+              const farmer = farmers.find(f => f.id === del.farmerId);
+              const farm = farms.find(f => f.id === del.farmId);
+              const linkedLot = lots.find(l => l.id === del.associatedLotId);
+
+              const qty = Number(del.quantityKg) || 0;
+              const bags = del.numberOfBags || Math.ceil(qty / 60);
+              const totalUgx = Number(del.totalPaymentUgx) || (qty * (Number(del.pricePerKgUgx) || 7200));
+
+              return (
+                <div key={del.id} className="p-4 bg-white border border-stone-200 rounded-lg shadow-sm space-y-2 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-stone-900 font-mono block">{del.receiptNumber || (del as any).deliveryRef || 'REC-N/A'}</span>
+                      <span className="text-[10px] text-stone-400">{del.deliveryDate || del.dateReceived || '—'}</span>
+                    </div>
+                    {linkedLot ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+                        Lot: {linkedLot.lotNumber}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0">
+                        Unassigned
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="pt-1 border-t border-stone-100">
+                    <div className="font-bold text-stone-900">{farmer?.fullName || 'Unknown Smallholder'}</div>
+                    <div className="text-[10px] text-stone-500 font-mono">{farm?.farmName || 'Primary Parcel'} • {farm?.district || 'Uganda'}</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-stone-100">
+                    <div>
+                      <span className="text-[10px] text-stone-400 uppercase font-bold block">Quantity</span>
+                      <span className="font-mono font-bold text-stone-900">{qty.toLocaleString()} kg</span>
+                      <span className="text-[10px] text-stone-500 ml-1">({bags} bags)</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-400 uppercase font-bold block">Payment</span>
+                      <span className="font-mono font-bold text-stone-800">UGX {totalUgx.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-stone-500 pt-1 border-t border-stone-100">
+                    {del.coffeeType} - {del.grade} • Moisture: {del.moistureContentPercent || 13.0}%
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ) : (
-          filteredDeliveries.map(del => {
-            const farmer = farmers.find(f => f.id === del.farmerId);
-            const farm = farms.find(f => f.id === del.farmId);
-            const linkedLot = lots.find(l => l.id === del.associatedLotId);
 
-            const qty = Number(del.quantityKg) || 0;
-            const bags = del.numberOfBags || Math.ceil(qty / 60);
-            const totalUgx = Number(del.totalPaymentUgx) || (qty * (Number(del.pricePerKgUgx) || 7200));
+          {/* Deliveries Desktop Table (>= md screens) */}
+          <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 bg-stone-50 text-stone-600 font-bold">
+                    <th className="py-2.5 px-3">Receipt / Ticket #</th>
+                    <th className="py-2.5 px-3">Smallholder Farmer</th>
+                    <th className="py-2.5 px-3">Farm Parcel / Location</th>
+                    <th className="py-2.5 px-3">Weight (Kg)</th>
+                    <th className="py-2.5 px-3">Grade & Moisture</th>
+                    <th className="py-2.5 px-3">Total UGX</th>
+                    <th className="py-2.5 px-3">Lot Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredDeliveries.map(del => {
+                    const farmer = farmers.find(f => f.id === del.farmerId);
+                    const farm = farms.find(f => f.id === del.farmId);
+                    const linkedLot = lots.find(l => l.id === del.associatedLotId);
 
-            return (
-              <div key={del.id} className="p-4 bg-white border border-stone-200 rounded-lg shadow-sm space-y-2 text-xs">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="font-bold text-stone-900 font-mono block">{del.receiptNumber || (del as any).deliveryRef || 'REC-N/A'}</span>
-                    <span className="text-[10px] text-stone-400">{del.deliveryDate || del.dateReceived || '—'}</span>
-                  </div>
-                  {linkedLot ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-                      Lot: {linkedLot.lotNumber}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0">
-                      Unassigned
-                    </span>
-                  )}
-                </div>
+                    const lat = farm?.latitude !== undefined && farm?.latitude !== null && !isNaN(Number(farm.latitude))
+                      ? Number(farm.latitude).toFixed(3)
+                      : null;
+                    const lon = farm?.longitude !== undefined && farm?.longitude !== null && !isNaN(Number(farm.longitude))
+                      ? Number(farm.longitude).toFixed(3)
+                      : null;
 
-                <div className="pt-1 border-t border-stone-100">
-                  <div className="font-bold text-stone-900">{farmer?.fullName || 'Unknown Smallholder'}</div>
-                  <div className="text-[10px] text-stone-500 font-mono">{farm?.farmName || 'Primary Parcel'} • {farm?.district || 'Uganda'}</div>
-                </div>
+                    const locString = lat && lon ? `(${lat}°, ${lon}°)` : '';
 
-                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-stone-100">
-                  <div>
-                    <span className="text-[10px] text-stone-400 uppercase font-bold block">Quantity</span>
-                    <span className="font-mono font-bold text-stone-900">{qty.toLocaleString()} kg</span>
-                    <span className="text-[10px] text-stone-500 ml-1">({bags} bags)</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-stone-400 uppercase font-bold block">Payment</span>
-                    <span className="font-mono font-bold text-stone-800">UGX {totalUgx.toLocaleString()}</span>
-                  </div>
-                </div>
+                    const qty = Number(del.quantityKg) || 0;
+                    const bags = del.numberOfBags || Math.ceil(qty / 60);
+                    const totalUgx = Number(del.totalPaymentUgx) || (qty * (Number(del.pricePerKgUgx) || 7200));
 
-                <div className="text-[11px] text-stone-500 pt-1 border-t border-stone-100">
-                  {del.coffeeType} - {del.grade} • Moisture: {del.moistureContentPercent || 13.0}%
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Deliveries Desktop Table (>= md screens) */}
-      <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-stone-200 bg-stone-50 text-stone-600 font-bold">
-                <th className="py-2.5 px-3">Receipt / Ticket #</th>
-                <th className="py-2.5 px-3">Smallholder Farmer</th>
-                <th className="py-2.5 px-3">Farm Parcel / Location</th>
-                <th className="py-2.5 px-3">Weight (Kg)</th>
-                <th className="py-2.5 px-3">Grade & Moisture</th>
-                <th className="py-2.5 px-3">Total UGX</th>
-                <th className="py-2.5 px-3">Lot Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {filteredDeliveries.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-stone-500">
-                    <AlertCircle className="w-6 h-6 mx-auto text-stone-400 mb-2" />
-                    <p className="font-semibold">No smallholder purchase receipts found</p>
-                    <p className="text-[11px] text-stone-400 mt-1">Record a farmer purchase or import delivery tickets to populate this intake ledger.</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredDeliveries.map(del => {
-                  const farmer = farmers.find(f => f.id === del.farmerId);
-                  const farm = farms.find(f => f.id === del.farmId);
-                  const linkedLot = lots.find(l => l.id === del.associatedLotId);
-
-                  const lat = farm?.latitude !== undefined && farm?.latitude !== null && !isNaN(Number(farm.latitude))
-                    ? Number(farm.latitude).toFixed(3)
-                    : null;
-                  const lon = farm?.longitude !== undefined && farm?.longitude !== null && !isNaN(Number(farm.longitude))
-                    ? Number(farm.longitude).toFixed(3)
-                    : null;
-
-                  const locString = lat && lon ? `(${lat}°, ${lon}°)` : '';
-
-                  const qty = Number(del.quantityKg) || 0;
-                  const bags = del.numberOfBags || Math.ceil(qty / 60);
-                  const totalUgx = Number(del.totalPaymentUgx) || (qty * (Number(del.pricePerKgUgx) || 7200));
-
-                  return (
-                    <tr key={del.id} className="hover:bg-stone-50 transition-colors">
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-stone-900 font-mono">{del.receiptNumber || (del as any).deliveryRef || 'REC-N/A'}</div>
-                        <div className="text-[10px] text-stone-400">{del.deliveryDate || del.dateReceived || '—'}</div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-stone-900">{farmer?.fullName || 'Unknown Smallholder'}</div>
-                        <div className="text-[10px] text-stone-500 font-mono">{farmer?.nationalId || farmer?.farmerRegId || 'NIN Pending'}</div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="text-stone-800 font-medium">{farm?.farmName || 'Primary Parcel'}</div>
-                        <div className="text-[10px] text-stone-500">{farm?.district || 'Uganda'} {locString}</div>
-                      </td>
-                      <td className="py-3 px-3 font-mono font-bold text-stone-900">
-                        {qty.toLocaleString()} kg
-                        <span className="text-[10px] text-stone-400 font-normal ml-1">({bags} bags)</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="font-bold text-stone-800">{del.coffeeType} - {del.grade}</span>
-                        <div className="text-[10px] text-stone-500">Moisture: {del.moistureContentPercent || 13.0}%</div>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-stone-800">
-                        UGX {totalUgx.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-3">
-                        {linkedLot ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                            Lot: {linkedLot.lotNumber}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                            Unassigned
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                    return (
+                      <tr key={del.id} className="hover:bg-stone-50 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-stone-900 font-mono">{del.receiptNumber || (del as any).deliveryRef || 'REC-N/A'}</div>
+                          <div className="text-[10px] text-stone-400">{del.deliveryDate || del.dateReceived || '—'}</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-stone-900">{farmer?.fullName || 'Unknown Smallholder'}</div>
+                          <div className="text-[10px] text-stone-500 font-mono">{farmer?.nationalId || farmer?.farmerRegId || 'NIN Pending'}</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="text-stone-800 font-medium">{farm?.farmName || 'Primary Parcel'}</div>
+                          <div className="text-[10px] text-stone-500">{farm?.district || 'Uganda'} {locString}</div>
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-stone-900">
+                          {qty.toLocaleString()} kg
+                          <span className="text-[10px] text-stone-400 font-normal ml-1">({bags} bags)</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="font-bold text-stone-800">{del.coffeeType} - {del.grade}</span>
+                          <div className="text-[10px] text-stone-500">Moisture: {del.moistureContentPercent || 13.0}%</div>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-stone-800">
+                          UGX {totalUgx.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-3">
+                          {linkedLot ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                              Lot: {linkedLot.lotNumber}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                              Unassigned
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* CREATE DELIVERY MODAL */}
       {showCreateModal && (

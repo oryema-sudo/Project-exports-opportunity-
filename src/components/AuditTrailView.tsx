@@ -9,6 +9,7 @@ import {
   Clock, 
   Lock
 } from 'lucide-react';
+import { EmptyState } from './EmptyState';
 
 interface AuditTrailViewProps {
   state: AppState;
@@ -85,88 +86,112 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({
         </div>
       </div>
 
-      {/* Audit Log Mobile Cards (< md screens) */}
-      <div className="block md:hidden space-y-3">
-        {filteredLogs.map(log => (
-          <div key={log.id} className="p-4 bg-white border border-stone-200 rounded-lg shadow-sm space-y-2 text-xs">
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
-                {log.action}
-              </span>
-              <span className="font-mono text-[10px] text-stone-400">
-                {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between pt-1 border-t border-stone-100">
-              <div>
-                <span className="font-mono font-bold text-stone-800">{log.entity}:</span>
-                <span className="font-mono text-stone-600 ml-1">{log.entityId}</span>
-              </div>
-              <div className="text-[11px] text-stone-500">
-                by <strong className="text-stone-700">{log.userName}</strong>
-              </div>
-            </div>
-
-            <div className="text-stone-600 pt-1 border-t border-stone-100 text-[11px]">
-              {log.details || 'State transition recorded.'}
-              {log.newValue && (
-                <div className="text-[10px] text-stone-400 font-mono mt-0.5 truncate">
-                  Val: {log.newValue}
+      {filteredLogs.length === 0 ? (
+        <EmptyState
+          icon={ShieldCheck}
+          title={auditLogs.length === 0 ? "No audit events logged yet" : "No matching audit records found"}
+          description={
+            auditLogs.length === 0
+              ? "The append-only audit trail logs smallholder registrations, GPS plot polygon updates, lot aggregations, and export dossier generations."
+              : "No audit records match your current filter or search criteria."
+          }
+          primaryAction={
+            auditLogs.length > 0 && filterEntity !== 'ALL'
+              ? {
+                  label: "Show All Entities",
+                  onClick: () => setFilterEntity('ALL')
+                }
+              : undefined
+          }
+          guidance="Every state mutation and compliance check is timestamped and cryptographically traceable."
+          badge="IMMUTABLE AUDIT TRAIL"
+        />
+      ) : (
+        <>
+          {/* Audit Log Mobile Cards (< md screens) */}
+          <div className="block md:hidden space-y-3">
+            {filteredLogs.map(log => (
+              <div key={log.id} className="p-4 bg-white border border-stone-200 rounded-lg shadow-sm space-y-2 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
+                    {log.action}
+                  </span>
+                  <span className="font-mono text-[10px] text-stone-400">
+                    {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
-              )}
+
+                <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+                  <div>
+                    <span className="font-mono font-bold text-stone-800">{log.entity}:</span>
+                    <span className="font-mono text-stone-600 ml-1">{log.entityId}</span>
+                  </div>
+                  <div className="text-[11px] text-stone-500">
+                    by <strong className="text-stone-700">{log.userName}</strong>
+                  </div>
+                </div>
+
+                <div className="text-stone-600 pt-1 border-t border-stone-100 text-[11px]">
+                  {log.details || 'State transition recorded.'}
+                  {log.newValue && (
+                    <div className="text-[10px] text-stone-400 font-mono mt-0.5 truncate">
+                      Val: {log.newValue}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Audit Log Desktop Table (>= md screens) */}
+          <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 bg-stone-50 text-stone-600 font-bold">
+                    <th className="py-2.5 px-3">Timestamp</th>
+                    <th className="py-2.5 px-3">User / Officer</th>
+                    <th className="py-2.5 px-3">Action</th>
+                    <th className="py-2.5 px-3">Entity & ID</th>
+                    <th className="py-2.5 px-3">Modifications / Log Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredLogs.map(log => (
+                    <tr key={log.id} className="hover:bg-stone-50 transition-colors">
+                      <td className="py-3 px-3 font-mono text-stone-500 text-[11px] whitespace-nowrap">
+                        <div>{new Date(log.timestamp).toLocaleDateString()}</div>
+                        <div className="text-stone-400">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-stone-900">{log.userName}</div>
+                        <div className="text-[10px] text-stone-400 font-mono">{log.userRole}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono">
+                        <div className="font-bold text-stone-900">{log.entity}</div>
+                        <div className="text-[10px] text-stone-500">{log.entityId}</div>
+                      </td>
+                      <td className="py-3 px-3 text-stone-700">
+                        <div>{log.details || 'State transition recorded.'}</div>
+                        {log.newValue && (
+                          <div className="text-[11px] text-stone-500 font-mono mt-0.5 truncate max-w-md">
+                            Val: {log.newValue}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        ))}
-      </div>
-
-      {/* Audit Log Desktop Table (>= md screens) */}
-      <div className="hidden md:block bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-stone-200 bg-stone-50 text-stone-600 font-bold">
-                <th className="py-2.5 px-3">Timestamp</th>
-                <th className="py-2.5 px-3">User / Officer</th>
-                <th className="py-2.5 px-3">Action</th>
-                <th className="py-2.5 px-3">Entity & ID</th>
-                <th className="py-2.5 px-3">Modifications / Log Details</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {filteredLogs.map(log => (
-                <tr key={log.id} className="hover:bg-stone-50 transition-colors">
-                  <td className="py-3 px-3 font-mono text-stone-500 text-[11px] whitespace-nowrap">
-                    <div>{new Date(log.timestamp).toLocaleDateString()}</div>
-                    <div className="text-stone-400">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className="font-bold text-stone-900">{log.userName}</div>
-                    <div className="text-[10px] text-stone-400 font-mono">{log.userRole}</div>
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
-                      {log.action}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 font-mono">
-                    <div className="font-bold text-stone-900">{log.entity}</div>
-                    <div className="text-[10px] text-stone-500">{log.entityId}</div>
-                  </td>
-                  <td className="py-3 px-3 text-stone-700">
-                    <div>{log.details || 'State transition recorded.'}</div>
-                    {log.newValue && (
-                      <div className="text-[11px] text-stone-500 font-mono mt-0.5 truncate max-w-md">
-                        Val: {log.newValue}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        </>
+      )}
 
     </div>
   );

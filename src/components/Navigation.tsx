@@ -21,6 +21,7 @@ import {
   User as UserIcon,
   ChevronDown,
   LogIn,
+  UserPlus,
   Menu,
   X,
   SlidersHorizontal,
@@ -33,6 +34,8 @@ import { AstroKahawaLogo, AstroKahawaIcon } from './AstroKahawaLogo';
 
 export type ActiveTab = 
   | 'home'
+  | 'login'
+  | 'signup'
   | 'dashboard' 
   | 'shipments' 
   | 'lots' 
@@ -292,13 +295,22 @@ export const Navigation: React.FC<NavigationProps> = ({
                   )}
                 </div>
               ) : (
-                <button
-                  onClick={() => onOpenAuth ? onOpenAuth('login') : appStore.loginWithGoogle()}
-                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer min-h-[36px]"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>Sign In</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => onOpenAuth ? onOpenAuth('login') : appStore.loginWithGoogle()}
+                    className="px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors border border-stone-700 cursor-pointer min-h-[36px]"
+                  >
+                    <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Sign In</span>
+                  </button>
+                  <button
+                    onClick={() => onOpenAuth ? onOpenAuth('signup') : appStore.loginWithGoogle()}
+                    className="hidden sm:flex px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold items-center gap-1.5 transition-colors shadow-sm cursor-pointer min-h-[36px]"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Create Account</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -390,6 +402,57 @@ export const Navigation: React.FC<NavigationProps> = ({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Mobile Auth / Account Access */}
+          <div className="bg-stone-800/80 p-3 rounded-lg border border-stone-700/80 space-y-2">
+            {state.currentUser && state.currentUser.email && state.currentUser.email.includes('@') ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white">{state.currentUser.name}</div>
+                  <div className="text-[11px] text-stone-400 font-mono truncate max-w-[180px]">{state.currentUser.email}</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    setMobileMenuOpen(false);
+                    await appStore.logout();
+                    setActiveTab('home');
+                  }}
+                  className="px-2.5 py-1.5 text-xs font-medium text-red-300 bg-red-950/60 border border-red-800/60 rounded flex items-center gap-1.5 hover:bg-red-900/60"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
+                  Account Access
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onOpenAuth?.('login');
+                    }}
+                    className="py-2 px-3 bg-stone-900 hover:bg-stone-750 border border-stone-700 text-stone-200 rounded text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Sign In</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onOpenAuth?.('signup');
+                    }}
+                    className="py-2 px-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Create Account</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Quick Actions on Mobile */}

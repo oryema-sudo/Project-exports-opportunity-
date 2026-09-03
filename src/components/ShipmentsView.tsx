@@ -14,6 +14,7 @@ import {
   Calendar,
   Globe
 } from 'lucide-react';
+import { EmptyState } from './EmptyState';
 import { INTERNATIONAL_BUYERS } from '../data/ugandaRegions';
 
 interface ShipmentsViewProps {
@@ -157,97 +158,132 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
       </div>
 
       {/* Shipments Grid / Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredShipments.map(shipment => {
-          const scorecard = appStore.getShipmentScorecard(shipment.id);
-          const isGreen = shipment.readinessStatus === 'GREEN';
-          const isYellow = shipment.readinessStatus === 'YELLOW';
-          const isRed = shipment.readinessStatus === 'RED';
+      {filteredShipments.length === 0 ? (
+        <EmptyState
+          icon={Truck}
+          title={shipments.length === 0 ? "No export consignments staged yet" : "No matching consignments found"}
+          description={
+            shipments.length === 0
+              ? "Assemble export coffee shipments by binding compliant lots, reviewing deforestation satellite checks, and generating verifiable DDS packs."
+              : "No consignments match the selected readiness state or search terms. Clear filters to see all shipments."
+          }
+          primaryAction={
+            shipments.length === 0
+              ? (currentUser.role !== 'viewer'
+                  ? {
+                      label: "Stage Export Consignment",
+                      onClick: () => setShowCreateModal(true),
+                      icon: Plus
+                    }
+                  : undefined)
+              : {
+                  label: "Reset Filters",
+                  onClick: () => {
+                    setFilterReadiness('ALL');
+                    setFilterCoffeeType('ALL');
+                  }
+                }
+          }
+          guidance={
+            shipments.length === 0
+              ? "Consignments evaluate EUDR deforestation status across all linked farm polygons before releasing export documentation."
+              : undefined
+          }
+          badge="DUE DILIGENCE DOSSIERS"
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredShipments.map(shipment => {
+            const scorecard = appStore.getShipmentScorecard(shipment.id);
+            const isGreen = shipment.readinessStatus === 'GREEN';
+            const isYellow = shipment.readinessStatus === 'YELLOW';
+            const isRed = shipment.readinessStatus === 'RED';
 
-          return (
-            <div
-              key={shipment.id}
-              onClick={() => onSelectShipment(shipment.id)}
-              className="bg-white border border-stone-200 rounded-lg p-5 shadow-sm hover:border-emerald-500 cursor-pointer transition-all flex flex-col justify-between space-y-4 group"
-            >
-              <div>
-                {/* Top Badge Row */}
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-mono text-xs font-bold text-stone-500">
-                    {shipment.id}
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                    isGreen ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
-                    isYellow ? 'bg-amber-100 text-amber-900 border-amber-300' :
-                    'bg-red-100 text-red-900 border-red-300'
-                  }`}>
-                    {isGreen ? 'READY FOR REVIEW' : isYellow ? 'REVIEW REQUIRED' : 'BLOCKED'}
-                  </span>
-                </div>
-
-                <h3 className="font-bold text-sm text-stone-900 group-hover:text-emerald-800 transition-colors">
-                  {shipment.exportReference}
-                </h3>
-                
-                <div className="text-xs text-stone-600 mt-1 flex items-center gap-1">
-                  <Globe className="w-3 h-3 text-stone-400" />
-                  <span>{shipment.buyerName}</span>
-                </div>
-                <div className="text-[11px] text-stone-500">
-                  Port: <strong>{shipment.destinationPort}</strong>, {shipment.destinationCountry}
-                </div>
-
-                {/* Score Preview */}
-                {scorecard && (
-                  <div className="mt-3 pt-3 border-t border-stone-100">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-semibold text-stone-600">Due-Diligence Readiness</span>
-                      <span className="font-bold font-mono text-stone-900">{scorecard.overallScorePercent}%</span>
-                    </div>
-                    <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
-                      <div 
-                        className={`h-1.5 rounded-full ${
-                          isGreen ? 'bg-emerald-700' : isYellow ? 'bg-amber-600' : 'bg-red-600'
-                        }`} 
-                        style={{ width: `${scorecard.overallScorePercent}%` }}
-                      ></div>
-                    </div>
-
-                    {/* Blocker Summary Line */}
-                    <div className="mt-2 text-[11px]">
-                      {scorecard.blockersCount > 0 ? (
-                        <span className="text-red-700 font-bold flex items-center gap-1">
-                          <XCircle className="w-3 h-3" /> {scorecard.blockersCount} blocker(s) prevent export
-                        </span>
-                      ) : scorecard.warningsCount > 0 ? (
-                        <span className="text-amber-700 font-semibold flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" /> {scorecard.warningsCount} review flag(s)
-                        </span>
-                      ) : (
-                        <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> All data & polygons verified
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Volume & Action Footer */}
-              <div className="pt-3 border-t border-stone-100 flex items-center justify-between text-xs">
+            return (
+              <div
+                key={shipment.id}
+                onClick={() => onSelectShipment(shipment.id)}
+                className="bg-white border border-stone-200 rounded-lg p-5 shadow-sm hover:border-emerald-500 cursor-pointer transition-all flex flex-col justify-between space-y-4 group"
+              >
                 <div>
-                  <span className="font-bold text-stone-900">{shipment.totalQuantityKg.toLocaleString()} kg</span>
-                  <span className="text-stone-500 ml-1">({shipment.coffeeType})</span>
-                </div>
-                <div className="text-emerald-800 font-bold text-xs flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                  Inspect <ArrowRight className="w-3 h-3" />
-                </div>
-              </div>
+                  {/* Top Badge Row */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-mono text-xs font-bold text-stone-500">
+                      {shipment.id}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                      isGreen ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+                      isYellow ? 'bg-amber-100 text-amber-900 border-amber-300' :
+                      'bg-red-100 text-red-900 border-red-300'
+                    }`}>
+                      {isGreen ? 'READY FOR REVIEW' : isYellow ? 'REVIEW REQUIRED' : 'BLOCKED'}
+                    </span>
+                  </div>
 
-            </div>
-          );
-        })}
-      </div>
+                  <h3 className="font-bold text-sm text-stone-900 group-hover:text-emerald-800 transition-colors">
+                    {shipment.exportReference}
+                  </h3>
+                  
+                  <div className="text-xs text-stone-600 mt-1 flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-stone-400" />
+                    <span>{shipment.buyerName}</span>
+                  </div>
+                  <div className="text-[11px] text-stone-500">
+                    Port: <strong>{shipment.destinationPort}</strong>, {shipment.destinationCountry}
+                  </div>
+
+                  {/* Score Preview */}
+                  {scorecard && (
+                    <div className="mt-3 pt-3 border-t border-stone-100">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-semibold text-stone-600">Due-Diligence Readiness</span>
+                        <span className="font-bold font-mono text-stone-900">{scorecard.overallScorePercent}%</span>
+                      </div>
+                      <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className={`h-1.5 rounded-full ${
+                            isGreen ? 'bg-emerald-700' : isYellow ? 'bg-amber-600' : 'bg-red-600'
+                          }`} 
+                          style={{ width: `${scorecard.overallScorePercent}%` }}
+                        ></div>
+                      </div>
+
+                      {/* Blocker Summary Line */}
+                      <div className="mt-2 text-[11px]">
+                        {scorecard.blockersCount > 0 ? (
+                          <span className="text-red-700 font-bold flex items-center gap-1">
+                            <XCircle className="w-3 h-3" /> {scorecard.blockersCount} blocker(s) prevent export
+                          </span>
+                        ) : scorecard.warningsCount > 0 ? (
+                          <span className="text-amber-700 font-semibold flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> {scorecard.warningsCount} review flag(s)
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> All data & polygons verified
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Volume & Action Footer */}
+                <div className="pt-3 border-t border-stone-100 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-stone-900">{shipment.totalQuantityKg.toLocaleString()} kg</span>
+                    <span className="text-stone-500 ml-1">({shipment.coffeeType})</span>
+                  </div>
+                  <div className="text-emerald-800 font-bold text-xs flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    Inspect <ArrowRight className="w-3 h-3" />
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* CREATE NEW SHIPMENT MODAL */}
       {showCreateModal && (

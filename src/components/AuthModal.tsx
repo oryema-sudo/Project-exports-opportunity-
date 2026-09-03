@@ -357,6 +357,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Switch to Signup */}
+              <div className="pt-3 border-t border-stone-800 flex items-center justify-between text-xs text-stone-400">
+                <span>New to AstroKahawa?</span>
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); setError(null); }}
+                  className="text-emerald-400 hover:text-emerald-300 font-semibold hover:underline cursor-pointer"
+                >
+                  Create Account →
+                </button>
+              </div>
             </div>
           )}
 
@@ -503,6 +515,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <UserPlus className="w-4 h-4" />
                 <span>{loading ? 'Creating Tenant Workspace...' : 'Create Account & Enter Platform'}</span>
               </button>
+
+              {/* Switch to Login */}
+              <div className="pt-3 border-t border-stone-800 flex items-center justify-between text-xs text-stone-400">
+                <span>Already registered?</span>
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setError(null); }}
+                  className="text-emerald-400 hover:text-emerald-300 font-semibold hover:underline cursor-pointer"
+                >
+                  Sign In to Workspace →
+                </button>
+              </div>
             </form>
           )}
 
