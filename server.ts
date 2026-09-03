@@ -213,7 +213,8 @@ async function startServer() {
       checks.storageProvider = storageHealth.provider;
 
       if (!checks.database || !checks.storage) {
-        throw new Error(`Degraded readiness: db=${checks.database}, storage=${checks.storage}`);
+        const detail = !checks.storage && storageHealth.message ? `: ${storageHealth.message}` : '';
+        throw new Error(`Degraded readiness: db=${checks.database}, storage=${checks.storage}${detail}`);
       }
 
       res.json({

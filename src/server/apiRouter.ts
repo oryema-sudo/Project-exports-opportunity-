@@ -7,7 +7,7 @@ import {
 } from '../db/schema.ts';
 import { eq, and, or, desc, inArray, gt, sql } from 'drizzle-orm';
 import { requireAuth, requireRole, verifyFirebaseToken, AuthRequest } from '../middleware/auth.ts';
-import { upload, resolveSecureFilePath, verifyFileSignature } from './storage.ts';
+import { upload, resolveSecureFilePath, verifyFileSignature, storageProvider } from './storage.ts';
 import { evaluateShipmentReadiness, READINESS_ENGINE_VERSION } from './readinessEngine.ts';
 import { seedOrganizationData } from './seedDatabase.ts';
 import { 
@@ -1524,7 +1524,7 @@ apiRouter.post('/documents/upload', requireAuth, requireRole(['admin', 'staff'])
       return res.status(400).json({ error: 'No file uploaded or file rejected by security filter' });
     }
 
-    // Inspect file signature / magic bytes
+    // Inspect file signature / magic bytes before persisting
     const isValidSignature = verifyFileSignature(req.file.path, req.file.mimetype);
     if (!isValidSignature) {
       // Remove corrupted / suspicious file immediately
@@ -1534,20 +1534,16 @@ apiRouter.post('/documents/upload', requireAuth, requireRole(['admin', 'staff'])
 
     const { type, relatedEntityType, relatedEntityId, notes } = req.body;
     const orgId = req.user!.organizationId;
-    const relativeFilePath = path.relative(process.cwd(), req.file.path);
 
-    const formatBytes = (bytes: number) => {
-      if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    };
+    // Persist via configured storage provider (Google Cloud Storage or Sandboxed Local)
+    const storageResult = await storageProvider.save(req.file, orgId);
 
     const [created] = await db.insert(documents).values({
       organizationId: orgId,
       type: type || 'Other',
       fileName: req.file.originalname,
-      fileSize: formatBytes(req.file.size),
-      filePath: relativeFilePath,
+      fileSize: storageResult.fileSizeFormatted,
+      filePath: storageResult.relativePath,
       mimeType: req.file.mimetype,
       uploadDate: new Date().toISOString().split('T')[0],
       uploadedBy: req.user!.name,
@@ -1610,18 +1606,61 @@ apiRouter.get('/documents/:id/download', requireAuth, async (req: AuthRequest, r
       return res.status(404).json({ error: 'Document not found or access denied' });
     }
 
-    const securePath = resolveSecureFilePath(doc[0]!.filePath, orgId);
-
-    if (!fs.existsSync(securePath)) {
-      return res.status(404).json({ error: 'File contents not found in private storage' });
+    let stream: NodeJS.ReadableStream;
+    try {
+      stream = storageProvider.getStream(doc[0]!.filePath, orgId);
+    } catch (streamInitErr: any) {
+      console.error('[Documents API] Storage stream initialization error:', streamInitErr.message || streamInitErr);
+      return res.status(404).json({ error: 'File contents not found in storage' });
     }
 
     res.setHeader('Content-Type', doc[0]!.mimeType);
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc[0]!.fileName)}"`);
-    fs.createReadStream(securePath).pipe(res);
+
+    stream.on('error', (streamErr: any) => {
+      console.error('[Documents API] Storage stream error:', streamErr.message || streamErr);
+      if (!res.headersSent) {
+        res.status(404).json({ error: 'File contents not found in storage' });
+      } else {
+        res.end();
+      }
+    });
+
+    stream.pipe(res);
   } catch (err: any) {
     console.error('[Documents API] Download failed:', err);
     res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
+// Secure Document Deletion from both Database and Storage Provider
+apiRouter.delete('/documents/:id', requireAuth, requireRole(['admin', 'staff']), async (req: AuthRequest, res: Response) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const docId = req.params.id as string;
+
+    const [existing] = await db.select().from(documents)
+      .where(and(eq(documents.id, docId), eq(documents.organizationId, orgId)))
+      .limit(1);
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Document not found or access denied' });
+    }
+
+    try {
+      await storageProvider.delete(existing.filePath, orgId);
+    } catch (storageErr) {
+      console.warn('[Documents API] Storage deletion warning:', storageErr);
+    }
+
+    await db.delete(documents)
+      .where(and(eq(documents.id, docId), eq(documents.organizationId, orgId)));
+
+    await logServerAudit(req, 'Document Deleted', 'Document', docId, existing.fileName, undefined);
+    res.json({ success: true, message: 'Document deleted successfully' });
+  } catch (err: any) {
+    console.error('[Documents API] Delete failed:', err);
+    res.status(500).json({ error: 'Failed to delete document' });
   }
 });
 
